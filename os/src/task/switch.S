@@ -8,6 +8,7 @@
     .section .text
     .globl __switch
 __switch:
+    # 上下文切换
     # __switch(
     #     current_task_cx_ptr: *mut TaskContext,
     #     next_task_cx_ptr: *const TaskContext
@@ -31,4 +32,3 @@ __switch:
     # restore kernel stack of next task
     ld sp, 8(a1)
     ret
-

@@ -2,17 +2,17 @@
 
 #[allow(unused)]
 
-/// user app's stack size
+/// user app's stack size: 4KB
 pub const USER_STACK_SIZE: usize = 4096;
-/// kernel stack size
+/// kernel stack size: 8KB
 pub const KERNEL_STACK_SIZE: usize = 4096 * 2;
-/// kernel heap size
+/// kernel heap size: 128KB
 pub const KERNEL_HEAP_SIZE: usize = 0x20000;
 /// the max number of apps
 pub const MAX_APP_NUM: usize = 16;
 /// base_addr(changed) of app
 pub const APP_BASE_ADDRESS: usize = 0x80400000;
-/// size limit of app
+/// size limit of app: 128KB
 pub const APP_SIZE_LIMIT: usize = 0x20000;
 
 /// clock frequency

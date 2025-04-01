@@ -24,7 +24,6 @@
 
 #[macro_use]
 extern crate log;
-
 extern crate alloc;
 
 #[macro_use]
@@ -46,62 +45,77 @@ core::arch::global_asm!(include_str!("link_app.S"));
 
 /// clear BSS segment
 fn clear_bss() {
-    extern "C" {
-        fn sbss();
-        fn ebss();
-    }
-    unsafe {
-        core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
-            .fill(0);
-    }
+  extern "C" {
+    fn sbss();
+    fn ebss();
+  }
+  unsafe {
+    core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
+      .fill(0);
+  }
 }
 
 /// kernel log info
 fn kernel_log_info() {
-    extern "C" {
-        fn stext(); // begin addr of text segment
-        fn etext(); // end addr of text segment
-        fn srodata(); // start addr of Read-Only data segment
-        fn erodata(); // end addr of Read-Only data ssegment
-        fn sdata(); // start addr of data segment
-        fn edata(); // end addr of data segment
-        fn sbss(); // start addr of BSS segment
-        fn ebss(); // end addr of BSS segment
-        fn boot_stack_lower_bound(); // stack lower bound
-        fn boot_stack_top(); // stack top
-    }
-    logging::init();
-    println!("[kernel] Hello, world!");
-    trace!(
-        "[kernel] .text [{:#x}, {:#x})",
-        stext as usize,
-        etext as usize
-    );
-    debug!(
-        "[kernel] .rodata [{:#x}, {:#x})",
-        srodata as usize, erodata as usize
-    );
-    info!(
-        "[kernel] .data [{:#x}, {:#x})",
-        sdata as usize, edata as usize
-    );
-    warn!(
-        "[kernel] boot_stack top=bottom={:#x}, lower_bound={:#x}",
-        boot_stack_top as usize, boot_stack_lower_bound as usize
-    );
-    error!("[kernel] .bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
+  extern "C" {
+    fn stext(); // begin addr of text segment
+    fn etext(); // end addr of text segment
+    fn srodata(); // start addr of Read-Only data segment
+    fn erodata(); // end addr of Read-Only data ssegment
+    fn sdata(); // start addr of data segment
+    fn edata(); // end addr of data segment
+    fn sbss(); // start addr of BSS segment
+    fn ebss(); // end addr of BSS segment
+    fn boot_stack_lower_bound(); // stack lower bound
+    fn boot_stack_top(); // stack top
+  }
+  // 初始化日志
+  logging::init();
+  println!("[kernel] Hello, world!");
+  trace!(
+    "[kernel] .text [{:#x}, {:#x})",
+    stext as usize,
+    etext as usize
+  );
+  debug!(
+    "[kernel] .rodata [{:#x}, {:#x})",
+    srodata as usize, erodata as usize
+  );
+  info!(
+    "[kernel] .data [{:#x}, {:#x})",
+    sdata as usize, edata as usize
+  );
+  warn!(
+    "[kernel] boot_stack top=bottom={:#x}, lower_bound={:#x}",
+    boot_stack_top as usize, boot_stack_lower_bound as usize
+  );
+  error!("[kernel] .bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
 }
 
 #[no_mangle]
 /// the rust entry-point of os
 pub fn rust_main() -> ! {
-    clear_bss();
-    kernel_log_info();
-    heap_alloc::init_heap();
-    trap::init();
-    loader::load_apps();
-    trap::enable_timer_interrupt();
-    timer::set_next_trigger();
-    task::run_first_task();
-    panic!("Unreachable in rust_main!");
+  clear_bss();
+  kernel_log_info();
+
+  // 初始化堆
+  heap_alloc::init_heap();
+
+  // 初始化 Trap
+  trap::init();
+
+  // 加载应用程序
+  loader::load_apps();
+
+  // 开启时钟中断
+  trap::enable_timer_interrupt();
+
+  // 设置下一个定时器中断
+  timer::set_next_trigger();
+
+  // 运行第一个任务
+  task::run_first_task();
+
+  // should not reach here
+  panic!("Unreachable in rust_main!");
 }
