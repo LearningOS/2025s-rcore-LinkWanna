@@ -1,14 +1,20 @@
+
 .altmacro
+# 宏：保存寄存器
 .macro SAVE_GP n
     sd x\n, \n*8(sp)
 .endm
+
+# 宏：加载寄存器
 .macro LOAD_GP n
     ld x\n, \n*8(sp)
 .endm
+
     .section .text
     .globl __alltraps
     .globl __restore
     .align 2
+# Trap 处理函数
 __alltraps:
     csrrw sp, sscratch, sp
     # now sp->kernel stack, sscratch->user stack
@@ -25,6 +31,7 @@ __alltraps:
         SAVE_GP %n
         .set n, n+1
     .endr
+
     # we can use t0/t1/t2 freely, because they were saved on kernel stack
     csrr t0, sstatus
     csrr t1, sepc
@@ -37,6 +44,7 @@ __alltraps:
     mv a0, sp
     call trap_handler
 
+# 从 Trap 中恢复
 __restore:
     # case1: start running app by __restore
     # case2: back to U after handling trap

@@ -6,6 +6,7 @@ use crate::trap::TrapContext;
 use core::arch::asm;
 use lazy_static::*;
 
+// 常量
 const USER_STACK_SIZE: usize = 4096 * 2;
 const KERNEL_STACK_SIZE: usize = 4096 * 2;
 const MAX_APP_NUM: usize = 16;
@@ -29,6 +30,7 @@ static USER_STACK: UserStack = UserStack {
   data: [0; USER_STACK_SIZE],
 };
 
+/// 内核栈
 impl KernelStack {
   fn get_sp(&self) -> usize {
     self.data.as_ptr() as usize + KERNEL_STACK_SIZE
@@ -42,12 +44,14 @@ impl KernelStack {
   }
 }
 
+/// 用户栈
 impl UserStack {
   fn get_sp(&self) -> usize {
     self.data.as_ptr() as usize + USER_STACK_SIZE
   }
 }
 
+/// 应用管理器
 struct AppManager {
   num_app: usize,
   current_app: usize,
@@ -55,6 +59,7 @@ struct AppManager {
 }
 
 impl AppManager {
+  /// 打印应用的信息
   pub fn print_app_info(&self) {
     println!("[kernel] num_app = {}", self.num_app);
     for i in 0..self.num_app {
@@ -67,6 +72,7 @@ impl AppManager {
     }
   }
 
+  /// 加载应用
   unsafe fn load_app(&self, app_id: usize) {
     if app_id >= self.num_app {
       println!("All applications completed!");
@@ -74,7 +80,8 @@ impl AppManager {
       crate::board::QEMU_EXIT_HANDLE.exit_success();
     }
     println!("[kernel] Loading app_{}", app_id);
-    // clear app area
+
+    // 清空 0x80400000 ~ 0x80400000 + APP_SIZE_LIMIT 部分的内存
     core::slice::from_raw_parts_mut(APP_BASE_ADDRESS as *mut u8, APP_SIZE_LIMIT).fill(0);
     let app_src = core::slice::from_raw_parts(
       self.app_start[app_id] as *const u8,
@@ -82,9 +89,11 @@ impl AppManager {
     );
     let app_dst = core::slice::from_raw_parts_mut(APP_BASE_ADDRESS as *mut u8, app_src.len());
     app_dst.copy_from_slice(app_src);
+
     // Memory fence about fetching the instruction memory
     // It is guaranteed that a subsequent instruction fetch must
     // observes all previous writes to the instruction memory.
+    //
     // Therefore, fence.i must be executed after we have loaded
     // the code of the next app into the instruction memory.
     // See also: riscv non-priv spec chapter 3, 'Zifencei' extension.
