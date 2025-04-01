@@ -1,7 +1,7 @@
 //! Process management syscalls
 //! 进程管理相关的系统调用
 use crate::{
-  task::{exit_current_and_run_next, suspend_current_and_run_next},
+  task::{exit_current_and_run_next, get_syscall_trace, suspend_current_and_run_next},
   timer::get_time_us,
 };
 
@@ -40,7 +40,20 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 }
 
 // TODO: implement the syscall
-pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
+pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
   trace!("kernel: sys_trace");
-  -1
+  match trace_request {
+    // 读取 id 地址处一个字节的无符号整数值
+    0 => unsafe { (id as *const u8).read_volatile() as isize },
+    // 写入 data(u8) 到该用户程序 id 地址处
+    1 => {
+      unsafe {
+        (id as *mut u8).write_volatile(data as u8);
+      };
+      0
+    }
+    // 查询当前任务调用编号为 id 的系统调用的次数
+    2 => get_syscall_trace(id) as isize,
+    _ => -1,
+  }
 }

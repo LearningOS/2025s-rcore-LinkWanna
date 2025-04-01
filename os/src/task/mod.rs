@@ -23,7 +23,6 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
 
-/// The task manager, where all the tasks are managed.
 /// 任务管理器，用于管理所有的任务
 ///
 /// Functions implemented on `TaskManager` deals with all task state transitions
@@ -55,6 +54,7 @@ lazy_static! {
     let mut tasks = [TaskControlBlock {
       task_cx: TaskContext::zero_init(),
       task_status: TaskStatus::UnInit,
+      syscalls_counter: [0; 512],
     }; MAX_APP_NUM];
     // 初始化任务
     for (i, task) in tasks.iter_mut().enumerate() {
@@ -137,6 +137,22 @@ impl TaskManager {
       panic!("All applications completed!");
     }
   }
+
+  ///
+  fn cur_syscall_trace(&self, syscall_id: usize) {
+    let mut inner = self.inner.exclusive_access();
+    let cur_task_id = inner.current_task;
+    let cur_task = &mut inner.tasks[cur_task_id];
+    cur_task.syscall_cnt(syscall_id);
+  }
+
+  ///
+  fn get_cur_syscall_trace(&self, syscall_id: usize) -> u32 {
+    let mut inner = self.inner.exclusive_access();
+    let cur_task_id = inner.current_task;
+    let cur_task = &mut inner.tasks[cur_task_id];
+    cur_task.syscalls_counter[syscall_id]
+  }
 }
 
 /// 运行任务列表中的第一个任务
@@ -159,6 +175,16 @@ fn mark_current_suspended() {
 /// Change the status of current `Running` task into `Exited`.
 fn mark_current_exited() {
   TASK_MANAGER.mark_current_exited();
+}
+
+/// 追踪 syscall
+pub fn syscall_trace(syscall_id: usize) {
+  TASK_MANAGER.cur_syscall_trace(syscall_id);
+}
+
+/// 追踪 syscall
+pub fn get_syscall_trace(syscall_id: usize) -> u32 {
+  TASK_MANAGER.get_cur_syscall_trace(syscall_id)
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.
