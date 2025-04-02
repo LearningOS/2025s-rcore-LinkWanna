@@ -25,12 +25,12 @@ OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
 CHAPTER ?= $(shell git rev-parse --abbrev-ref HEAD | sed -E 's/ch([0-9])/\1/')
 TEST ?= $(CHAPTER)
-BASE ?= 0
+BASE ?= 2
 
 # Disassembly
 DISASM ?= -x
 
-build: $(KERNEL_BIN)
+build: env $(KERNEL_BIN)
 
 env:
 ifeq ($(OFFLINE),)
