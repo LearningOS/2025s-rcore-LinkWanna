@@ -17,6 +17,7 @@ impl TrapContext {
   pub fn set_sp(&mut self, sp: usize) {
     self.x[2] = sp;
   }
+
   /// init the trap context of an application
   pub fn app_init_context(entry: usize, sp: usize) -> Self {
     let mut sstatus = sstatus::read(); // CSR sstatus

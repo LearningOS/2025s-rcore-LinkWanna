@@ -19,3 +19,4 @@ ci-user/
 user/
 os/vendor/
 *.log
+user/

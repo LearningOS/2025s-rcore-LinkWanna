@@ -10,13 +10,18 @@ pub struct TaskControlBlock {
   /// The task context
   pub task_cx: TaskContext,
   /// The syscalls counter
-  pub syscalls_counter: [u32; 512],
+  pub syscalls_cnt: [u32; 512],
 }
 
 impl TaskControlBlock {
   /// Increment the syscall counter for the given syscall id.
-  pub fn syscall_cnt(&mut self, syscall_id: usize) {
-    self.syscalls_counter[syscall_id] += 1;
+  pub fn syscall_cnt_index(&self, syscall_id: usize) -> u32 {
+    self.syscalls_cnt[syscall_id]
+  }
+
+  /// Increment the syscall counter for the given syscall id.
+  pub fn syscall_cnt_plus(&mut self, syscall_id: usize) {
+    self.syscalls_cnt[syscall_id] += 1;
   }
 }
 

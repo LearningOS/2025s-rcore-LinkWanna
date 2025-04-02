@@ -54,7 +54,7 @@ lazy_static! {
     let mut tasks = [TaskControlBlock {
       task_cx: TaskContext::zero_init(),
       task_status: TaskStatus::UnInit,
-      syscalls_counter: [0; 512],
+      syscalls_cnt: [0; 512],
     }; MAX_APP_NUM];
     // 初始化任务
     for (i, task) in tasks.iter_mut().enumerate() {
@@ -139,19 +139,19 @@ impl TaskManager {
   }
 
   ///
-  fn cur_syscall_trace(&self, syscall_id: usize) {
+  fn cur_syscall_cnt_plus(&self, syscall_id: usize) {
     let mut inner = self.inner.exclusive_access();
     let cur_task_id = inner.current_task;
     let cur_task = &mut inner.tasks[cur_task_id];
-    cur_task.syscall_cnt(syscall_id);
+    cur_task.syscall_cnt_plus(syscall_id);
   }
 
   ///
-  fn get_cur_syscall_trace(&self, syscall_id: usize) -> u32 {
+  fn cur_syscall_trace(&self, syscall_id: usize) -> u32 {
     let mut inner = self.inner.exclusive_access();
     let cur_task_id = inner.current_task;
     let cur_task = &mut inner.tasks[cur_task_id];
-    cur_task.syscalls_counter[syscall_id]
+    cur_task.syscalls_cnt[syscall_id]
   }
 }
 
@@ -179,12 +179,12 @@ fn mark_current_exited() {
 
 /// 追踪 syscall
 pub fn syscall_trace(syscall_id: usize) {
-  TASK_MANAGER.cur_syscall_trace(syscall_id);
+  TASK_MANAGER.cur_syscall_cnt_plus(syscall_id);
 }
 
 /// 追踪 syscall
 pub fn get_syscall_trace(syscall_id: usize) -> u32 {
-  TASK_MANAGER.get_cur_syscall_trace(syscall_id)
+  TASK_MANAGER.cur_syscall_trace(syscall_id)
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.
