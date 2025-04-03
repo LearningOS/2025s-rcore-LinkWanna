@@ -14,8 +14,11 @@ easy-fs-fuse/Cargo.lock
 easy-fs-fuse/target/*
 tools/
 pushall.sh
-*.bak
-
 ci-user/
+user/
 os/vendor/
 user/
+
+bck/
+*.log
+migrate.sh
