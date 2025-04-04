@@ -1,7 +1,13 @@
 //! Process management syscalls
+
+use core::{mem::size_of, ptr::addr_of};
+
 use crate::{
-  task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next},
-  timer::{get_time_sec, get_time_us},
+  mm::copy_to_user,
+  task::{
+    change_program_brk, current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
+  },
+  timer::get_time_us,
 };
 
 #[repr(C)]
@@ -30,8 +36,18 @@ pub fn sys_yield() -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
   trace!("kernel: sys_get_time");
-  unsafe { (*ts).sec = get_time_sec() };
-  unsafe { (*ts).sec = get_time_us() };
+  let us = get_time_us();
+  let time_val = TimeVal {
+    sec: us / 1_000_000,
+    usec: us % 1_000_000,
+  };
+
+  copy_to_user(
+    current_user_token(),
+    ts as *mut u8,
+    addr_of!(time_val) as *const u8,
+    size_of::<TimeVal>(),
+  );
   0
 }
 
@@ -53,6 +69,7 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
   trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
   -1
 }
+
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
   trace!("kernel: sys_sbrk");
