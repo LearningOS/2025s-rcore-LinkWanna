@@ -1,6 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -49,7 +49,7 @@ impl PageTableEntry {
     PageTableEntry { bits: 0 }
   }
 
-  /// 从页表中获取一个物理页号
+  /// 从页表项中获取相应的物理页号
   pub fn ppn(&self) -> PhysPageNum {
     (self.bits >> 10 & ((1usize << 44) - 1)).into()
   }
@@ -149,16 +149,16 @@ impl PageTable {
     result
   }
 
-  /// 设置虚拟页号和物理页号的映射关系
   #[allow(unused)]
+  /// 设置虚拟页号和物理页号的映射关系
   pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
     let pte = self.find_pte_create(vpn).unwrap();
     assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
     *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
   }
 
-  /// 移除虚拟页号和物理页号的映射关系
   #[allow(unused)]
+  /// 移除虚拟页号和物理页号的映射关系
   pub fn unmap(&mut self, vpn: VirtPageNum) {
     let pte = self.find_pte(vpn).unwrap();
     assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
@@ -178,18 +178,22 @@ impl PageTable {
 }
 
 /// Translate&Copy a ptr[u8] array with LENGTH len to a mutable u8 Vec through page table
+/// 将 U 态字节数组复制到 S 态中
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
   let page_table = PageTable::from_token(token);
   let mut start = ptr as usize;
   let end = start + len;
   let mut v = Vec::new();
+
   while start < end {
     let start_va = VirtAddr::from(start);
     let mut vpn = start_va.floor();
+    // 获取虚拟页号对应的物理页号
     let ppn = page_table.translate(vpn).unwrap().ppn();
     vpn.step();
     let mut end_va: VirtAddr = vpn.into();
     end_va = end_va.min(VirtAddr::from(end));
+
     if end_va.page_offset() == 0 {
       v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
     } else {
@@ -198,4 +202,38 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     start = end_va.into();
   }
   v
+}
+
+/// 将 S 态字节数组复制到 U 态中
+pub fn copy_to_user(token: usize, user_ptr: *mut u8, kernel_ptr: *const u8, len: usize) {
+  let page_table = PageTable::from_token(token);
+  let mut start = user_ptr as usize;
+  let mut k_start = kernel_ptr as usize;
+  let end = start + len;
+
+  while start < end {
+    let start_va = VirtAddr::from(start);
+    let mut vpn = start_va.floor();
+    let ppn = page_table.translate(vpn).unwrap().ppn();
+    // 获取结尾地址
+    vpn.step();
+    let mut end_va: VirtAddr = vpn.into();
+    end_va = end_va.min(VirtAddr::from(end));
+
+    // 获取目标地址指针
+    let pa_offset: PhysAddr = PhysAddr((ppn.0 << 12) + start_va.page_offset());
+    let dst: *mut u8 = pa_offset.0 as *mut u8;
+
+    let cp_len = if end_va.page_offset() == 0 {
+      4096 - start_va.page_offset()
+    } else {
+      end_va.page_offset() - start_va.page_offset()
+    };
+
+    // 不在同一个内存空间，可以保证不会重叠
+    unsafe { dst.copy_from_nonoverlapping(k_start as *const u8, cp_len) };
+
+    start += cp_len;
+    k_start += cp_len;
+  }
 }
