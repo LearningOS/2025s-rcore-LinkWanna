@@ -15,19 +15,9 @@ const MSEC_PER_SEC: usize = 1000;
 #[allow(dead_code)]
 const MICRO_PER_SEC: usize = 1_000_000;
 
-/// The number of seconds per second
-#[allow(dead_code)]
-const SEC_PER_SEC: usize = 1_000_000_000;
-
 /// Get the current time in ticks
 pub fn get_time() -> usize {
   time::read()
-}
-
-/// get current time in seconds
-#[allow(dead_code)]
-pub fn get_time_sec() -> usize {
-  time::read() * SEC_PER_SEC / CLOCK_FREQ
 }
 
 /// get current time in milliseconds

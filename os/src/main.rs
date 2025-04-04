@@ -103,7 +103,11 @@ pub fn rust_main() -> ! {
   // 初始化虚拟内存
   mm::init();
   println!("[kernel] back to world!");
+
+  // 内存测试
   mm::remap_test();
+
+  // 初始化中断
   trap::init();
   trap::enable_timer_interrupt();
   timer::set_next_trigger();

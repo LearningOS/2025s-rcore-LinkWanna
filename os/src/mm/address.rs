@@ -112,6 +112,7 @@ impl VirtAddr {
   }
 
   /// Get the page offset of virtual address
+  /// 获取虚拟地址的页偏移量
   pub fn page_offset(&self) -> usize {
     self.0 & (PAGE_SIZE - 1)
   }
@@ -181,12 +182,13 @@ impl VirtPageNum {
 }
 
 impl PhysAddr {
-  ///Get mutable reference to `PhysAddr` value
+  /// Get mutable reference to `PhysAddr` value
   /// Get the mutable reference of physical address
   pub fn get_mut<T>(&self) -> &'static mut T {
     unsafe { (self.0 as *mut T).as_mut().unwrap() }
   }
 }
+
 /// 内核中访问物理页帧的方法
 impl PhysPageNum {
   /// Get the reference of page table(array of ptes)
@@ -204,7 +206,7 @@ impl PhysPageNum {
   }
 
   /// Get the mutable reference of physical address
-  /// 获取一个物理地址的可变引用
+  /// 获取一个(等效于)物理地址的可变引用
   pub fn get_mut<T>(&self) -> &'static mut T {
     let pa: PhysAddr = (*self).into();
     pa.get_mut()

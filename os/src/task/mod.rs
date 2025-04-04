@@ -81,7 +81,9 @@ impl TaskManager {
     let next_task = &mut inner.tasks[0];
     next_task.task_status = TaskStatus::Running;
     let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
-    drop(inner);
+    drop(inner); // 释放 TaskManagerInner 的可变引用
+
+    // 第一个任务，没有上下文状态
     let mut _unused = TaskContext::zero_init();
     // before this, we should drop local variables that must be dropped manually
     unsafe {
@@ -155,7 +157,6 @@ impl TaskManager {
     }
   }
 }
-
 /// Run the first task in task list.
 pub fn run_first_task() {
   TASK_MANAGER.run_first_task();

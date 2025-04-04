@@ -16,11 +16,10 @@ pub struct TaskControlBlock {
   pub task_status: TaskStatus,
 
   /// Application address space
-  /// 应用地址空间
+  /// 任务地址空间
   pub memory_set: MemorySet,
 
   /// The phys page number of trap context
-  /// 跳板代码所在物理页
   pub trap_cx_ppn: PhysPageNum,
 
   /// The size(top addr) of program which is loaded from elf file

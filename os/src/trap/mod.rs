@@ -56,11 +56,15 @@ pub fn enable_timer_interrupt() {
 /// trap handler
 #[no_mangle]
 pub fn trap_handler() -> ! {
+  // 设置内核 Trap 入口
   set_kernel_trap_entry();
+
+  // 获得当前用户进程的 Trap 上下文
   let cx = current_trap_cx();
   let scause = scause::read(); // get trap cause
   let stval = stval::read(); // get extra value
-                             // trace!("into {:?}", scause.cause());
+
+  // trace!("into {:?}", scause.cause());
   match scause.cause() {
     Trap::Exception(Exception::UserEnvCall) => {
       // jump to next instruction anyway

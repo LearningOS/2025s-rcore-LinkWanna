@@ -36,7 +36,7 @@ lazy_static! {
 }
 
 /// address space
-/// 地址空间
+/// 地址空间: 维护内存映射
 pub struct MemorySet {
   page_table: PageTable,
   areas: Vec<MapArea>,
@@ -113,6 +113,7 @@ impl MemorySet {
       ),
       None,
     );
+
     info!("mapping .rodata section");
     memory_set.push(
       MapArea::new(
@@ -123,6 +124,7 @@ impl MemorySet {
       ),
       None,
     );
+
     info!("mapping .data section");
     memory_set.push(
       MapArea::new(
@@ -133,6 +135,7 @@ impl MemorySet {
       ),
       None,
     );
+
     info!("mapping .bss section");
     memory_set.push(
       MapArea::new(
@@ -143,6 +146,7 @@ impl MemorySet {
       ),
       None,
     );
+
     info!("mapping physical memory");
     memory_set.push(
       MapArea::new(
@@ -290,7 +294,7 @@ impl MemorySet {
 /// 映射区域，控制一个连续的虚拟地址
 pub struct MapArea {
   vpn_range: VPNRange,
-  data_frames: BTreeMap<VirtPageNum, FrameTracker>,
+  data_frames: BTreeMap<VirtPageNum, FrameTracker>, // 虚拟页号到物理页号的映射
   map_type: MapType,
   map_perm: MapPermission,
 }
@@ -313,18 +317,22 @@ impl MapArea {
     }
   }
 
+  /// 将一个虚拟页号映射到物理页号
   pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
     let ppn: PhysPageNum;
     match self.map_type {
+      // 恒等映射，用于内核空间
       MapType::Identical => {
         ppn = PhysPageNum(vpn.0);
       }
+      // 页映射，用于用户空间
       MapType::Framed => {
         let frame = frame_alloc().unwrap();
         ppn = frame.ppn;
         self.data_frames.insert(vpn, frame);
       }
     }
+
     let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
     page_table.map(vpn, ppn, pte_flags);
   }
@@ -351,6 +359,7 @@ impl MapArea {
   }
 
   #[allow(unused)]
+  /// 缩小虚拟地址空间至指定的虚拟页号
   pub fn shrink_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
     for vpn in VPNRange::new(new_end, self.vpn_range.get_end()) {
       self.unmap_one(page_table, vpn)
@@ -359,6 +368,7 @@ impl MapArea {
   }
 
   #[allow(unused)]
+  /// 扩大虚拟地址空间至指定的虚拟页号
   pub fn append_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
     for vpn in VPNRange::new(self.vpn_range.get_end(), new_end) {
       self.map_one(page_table, vpn)
@@ -373,6 +383,7 @@ impl MapArea {
     let mut start: usize = 0;
     let mut current_vpn = self.vpn_range.get_start();
     let len = data.len();
+
     loop {
       let src = &data[start..len.min(start + PAGE_SIZE)];
       let dst = &mut page_table
@@ -423,23 +434,30 @@ pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
 #[allow(unused)]
 pub fn remap_test() {
   let mut kernel_space = KERNEL_SPACE.exclusive_access();
+
   let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
   let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
   let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
+
   assert!(!kernel_space
     .page_table
     .translate(mid_text.floor())
     .unwrap()
     .writable(),);
+
   assert!(!kernel_space
     .page_table
     .translate(mid_rodata.floor())
     .unwrap()
     .writable(),);
+
   assert!(!kernel_space
     .page_table
     .translate(mid_data.floor())
     .unwrap()
     .executable(),);
+
+  // let root_ppn = PhysPageNum(kernel_space.token() & ((1 << 44) - 1));
+  // debug_view(root_ppn, 0);
   println!("remap_test passed!");
 }

@@ -1,3 +1,5 @@
+# 根据 risc-v 标准，如果需要修改内存视图，我们只需要
+# 改变 csr 寄存器 satp 中的根页表，并刷新 TLB。
 .altmacro
 .macro SAVE_GP n
     sd x\n, \n*8(sp)
@@ -41,7 +43,7 @@ __alltraps:
     # switch to kernel space
     csrw satp, t0
     sfence.vma  # 刷新 TLB
-    # jump to trap_handler
+    # jump to trap_handler(不能直接使用 call 进行调用)
     jr t1
 
 __restore:
