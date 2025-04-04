@@ -5,6 +5,7 @@
 .macro LOAD_GP n
     ld x\n, \n*8(sp)
 .endm
+    # 声明为 .text.trampoline 段
     .section .text.trampoline
     .globl __alltraps
     .globl __restore
@@ -39,7 +40,7 @@ __alltraps:
     ld sp, 35*8(sp)
     # switch to kernel space
     csrw satp, t0
-    sfence.vma
+    sfence.vma  # 刷新 TLB
     # jump to trap_handler
     jr t1
 

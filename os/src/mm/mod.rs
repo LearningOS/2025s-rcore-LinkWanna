@@ -1,4 +1,5 @@
 //! Memory management implementation
+//! 内存管理实现
 //!
 //! SV39 page-based virtual-memory architecture for RV64 systems, and
 //! everything about memory management, like frame allocator, page table,
@@ -21,8 +22,9 @@ pub use page_table::{translated_byte_buffer, PageTableEntry};
 pub use page_table::{PTEFlags, PageTable};
 
 /// initiate heap allocator, frame allocator and kernel space
+/// 初始化堆分配器，帧分配器和内核空间
 pub fn init() {
-    heap_allocator::init_heap();
-    frame_allocator::init_frame_allocator();
-    KERNEL_SPACE.exclusive_access().activate();
+  heap_allocator::init_heap();
+  frame_allocator::init_frame_allocator();
+  KERNEL_SPACE.exclusive_access().activate();
 }

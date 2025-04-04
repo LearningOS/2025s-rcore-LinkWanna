@@ -2,20 +2,22 @@
 
 #[allow(unused)]
 
-/// user app's stack size
+/// user app's stack size: 8KB
 pub const USER_STACK_SIZE: usize = 4096 * 2;
-/// kernel stack size
+/// kernel stack size: 8KB
 pub const KERNEL_STACK_SIZE: usize = 4096 * 2;
 /// kernel heap size
 pub const KERNEL_HEAP_SIZE: usize = 0x200_0000;
 
 /// page size : 4KB
 pub const PAGE_SIZE: usize = 0x1000;
-/// page size bits: 12
+/// page size bits: 12(4KB)
 pub const PAGE_SIZE_BITS: usize = 0xc;
 /// the max number of syscall
 pub const MAX_SYSCALL_NUM: usize = 500;
-/// the virtual addr of trapoline
+
+/// the virtual addr of trampoline:
+/// 跳板代码，在 U 态和 S 态，均处于同一位置(虚拟地址最高位)
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 /// the virtual addr of trap context
 pub const TRAP_CONTEXT_BASE: usize = TRAMPOLINE - PAGE_SIZE;
