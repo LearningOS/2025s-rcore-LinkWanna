@@ -23,5 +23,6 @@ pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 pub const TRAP_CONTEXT_BASE: usize = TRAMPOLINE - PAGE_SIZE;
 /// clock frequency
 pub const CLOCK_FREQ: usize = 12500000;
-/// the physical memory end
+/// the physical memory end: 128MB(qemu 默认大小)
+/// 物理内存范围: 0x80000000 ~ 0x88000000
 pub const MEMORY_END: usize = 0x88000000;

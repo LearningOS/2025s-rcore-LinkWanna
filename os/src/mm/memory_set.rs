@@ -16,8 +16,8 @@ use lazy_static::*;
 use riscv::register::satp;
 
 extern "C" {
-  fn stext();
-  fn etext();
+  fn stext(); // text 段起点
+  fn etext(); // text 段结尾
   fn srodata();
   fn erodata();
   fn sdata();
@@ -38,8 +38,8 @@ lazy_static! {
 /// address space
 /// 地址空间: 维护内存映射
 pub struct MemorySet {
-  page_table: PageTable,
-  areas: Vec<MapArea>,
+  page_table: PageTable, // 物理内存页表
+  areas: Vec<MapArea>,   // 虚拟内存的逻辑段
 }
 
 impl MemorySet {
@@ -57,20 +57,68 @@ impl MemorySet {
   }
 
   /// Assume that no conflicts.
+  /// 确保区域之间没有冲突
   pub fn insert_framed_area(
     &mut self,
     start_va: VirtAddr,
     end_va: VirtAddr,
     permission: MapPermission,
-  ) {
+  ) -> bool {
+    // 通过页表判断是否已经映射
+    let start_vpn: VirtPageNum = start_va.floor();
+    let end_vpn: VirtPageNum = end_va.ceil();
+    let page_table = &self.page_table;
+
+    for vpn in VPNRange::new(start_vpn, end_vpn) {
+
+      if let Some(pte) = page_table.translate(vpn) {        
+        if pte.is_valid() {
+          // 如果已经映射，则返回 false
+          warn!("vpn: {} is already mapped", vpn.0);
+          return false;
+        }
+      } 
+    }
+
     self.push(
       MapArea::new(start_va, end_va, MapType::Framed, permission),
       None,
     );
+    true
+  }
+
+  ///
+  pub fn remove_framed_area(&mut self,
+    start_va: VirtAddr,
+    end_va: VirtAddr
+  ) -> bool {
+    // 通过页表判断是否已经映射
+    let start_vpn: VirtPageNum = start_va.floor();
+    let end_vpn: VirtPageNum = end_va.ceil();
+    let page_table = &mut self.page_table;
+
+    for vpn in VPNRange::new(start_vpn, end_vpn) {
+      if let Some(pte) = page_table.translate(vpn) {
+        if !pte.is_valid() {
+          // 如果未映射，则返回 false
+          warn!("vpn: {} have not mapped", vpn.0);
+          return false;
+        }
+      }
+    }
+
+    self.areas.iter_mut()
+    .find(|area| area.vpn_range.contains(start_vpn))
+    .map(|area| {
+      // 取消映射
+      // area.unmap(page_table);
+      area.unmap(page_table);
+    });
+    true
   }
 
   /// 在地址空间中插入一个新的逻辑段
-  fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
+  fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>)  {
     map_area.map(&mut self.page_table);
     if let Some(data) = data {
       map_area.copy_data(&mut self.page_table, data);
@@ -151,7 +199,7 @@ impl MemorySet {
     memory_set.push(
       MapArea::new(
         (ekernel as usize).into(),
-        MEMORY_END.into(),
+        MEMORY_END.into(), // 一直映射到物理内存结尾
         MapType::Identical,
         MapPermission::R | MapPermission::W,
       ),
@@ -166,6 +214,7 @@ impl MemorySet {
     let mut memory_set = Self::new_bare();
 
     // map trampoline
+    // 映射跳板代码
     memory_set.map_trampoline();
     // map program headers of elf, with U flag
     let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
@@ -182,6 +231,7 @@ impl MemorySet {
         let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize).into();
         let mut map_perm = MapPermission::U;
         let ph_flags = ph.flags();
+
         if ph_flags.is_read() {
           map_perm |= MapPermission::R;
         }
@@ -206,6 +256,7 @@ impl MemorySet {
     // guard page
     user_stack_bottom += PAGE_SIZE;
     let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
+    // 栈区(大小固定)
     memory_set.push(
       MapArea::new(
         user_stack_bottom.into(),
@@ -216,6 +267,7 @@ impl MemorySet {
       None,
     );
     // used in sbrk
+    // 堆区
     memory_set.push(
       MapArea::new(
         user_stack_top.into(),
@@ -225,7 +277,9 @@ impl MemorySet {
       ),
       None,
     );
+
     // map TrapContext
+    // Trap 上下文
     memory_set.push(
       MapArea::new(
         TRAP_CONTEXT_BASE.into(),
@@ -235,6 +289,7 @@ impl MemorySet {
       ),
       None,
     );
+
     // 返回地址空间，用户栈顶，入口点
     (
       memory_set,
@@ -255,6 +310,7 @@ impl MemorySet {
   }
 
   /// Translate a virtual page number to a page table entry
+  /// 具体工作交给页表，这里只是重新导出了接口
   pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
     self.page_table.translate(vpn)
   }
@@ -265,7 +321,7 @@ impl MemorySet {
     if let Some(area) = self
       .areas
       .iter_mut()
-      .find(|area| area.vpn_range.get_start() == start.floor())
+      .find(|area| area.vpn_range.contains(start.floor()))
     {
       area.shrink_to(&mut self.page_table, new_end.ceil());
       true
@@ -277,16 +333,30 @@ impl MemorySet {
   /// append the area to new_end
   #[allow(unused)]
   pub fn append_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
+    // 找到对应的区域进行扩展
     if let Some(area) = self
       .areas
       .iter_mut()
-      .find(|area| area.vpn_range.get_start() == start.floor())
+      .find(|area| area.vpn_range.get_start() == start.floor()) 
     {
       area.append_to(&mut self.page_table, new_end.ceil());
       true
     } else {
       false
     }
+  }
+
+  /// debug view of the page table
+  pub fn debug_vpn_view(&self) {
+    debug!("---------------------------------------------------");
+    let map_vec = &self.areas;
+    for area in map_vec {
+      let map = &area.data_frames;
+      for (vpn, ppn) in map {
+        debug!("vpn: {:p} -> ppn {:p}", vpn.0 as *const u8, ppn.ppn.0 as *const u8);
+      }
+    }
+    debug!("---------------------------------------------------");
   }
 }
 
@@ -309,6 +379,8 @@ impl MapArea {
     // 获取地址所在的页号
     let start_vpn: VirtPageNum = start_va.floor();
     let end_vpn: VirtPageNum = end_va.ceil();
+    
+    // 只分配虚拟页，但是不分配物理页
     Self {
       vpn_range: VPNRange::new(start_vpn, end_vpn),
       data_frames: BTreeMap::new(),
@@ -327,9 +399,9 @@ impl MapArea {
       }
       // 页映射，用于用户空间
       MapType::Framed => {
-        let frame = frame_alloc().unwrap();
+        let frame = frame_alloc().unwrap(); // 从分配器中获取一个物理页
         ppn = frame.ppn;
-        self.data_frames.insert(vpn, frame);
+        self.data_frames.insert(vpn, frame); // 与指定虚拟页进行映射
       }
     }
 
@@ -342,7 +414,7 @@ impl MapArea {
     if self.map_type == MapType::Framed {
       self.data_frames.remove(&vpn);
     }
-    page_table.unmap(vpn);
+    assert!(page_table.unmap(vpn), "Failed to unmap page");
   }
 
   pub fn map(&mut self, page_table: &mut PageTable) {
@@ -457,7 +529,5 @@ pub fn remap_test() {
     .unwrap()
     .executable(),);
 
-  // let root_ppn = PhysPageNum(kernel_space.token() & ((1 << 44) - 1));
-  // debug_view(root_ppn, 0);
   println!("remap_test passed!");
 }

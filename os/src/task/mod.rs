@@ -14,7 +14,9 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::VirtAddr;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -129,6 +131,20 @@ impl TaskManager {
     inner.tasks[inner.current_task].get_trap_cx()
   }
 
+  /// 
+  pub fn map_cur_mem_area(&self, start_va: VirtAddr, end_va: VirtAddr, permission: u8) -> bool {
+    let mut inner = self.inner.exclusive_access();
+    let cur = inner.current_task;
+    inner.tasks[cur].map_mem_area(start_va, end_va, permission)
+  }
+
+  ///
+  pub fn unmap_cur_mem_area(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+    let mut inner = self.inner.exclusive_access();
+    let cur = inner.current_task;
+    inner.tasks[cur].unmap_mem_area(start_va, end_va)
+  }
+
   /// Change the current 'Running' task's program break
   pub fn change_current_program_brk(&self, size: i32) -> Option<usize> {
     let mut inner = self.inner.exclusive_access();
@@ -156,7 +172,29 @@ impl TaskManager {
       panic!("All applications completed!");
     }
   }
+
+  fn cur_trace_syscall_step(&self, syscall_id: usize) {
+    let mut inner = self.inner.exclusive_access();
+    let cur = inner.current_task;
+    let cur_task = &mut inner.tasks[cur];
+    cur_task.trace_syscall_step(syscall_id);
+  }
+
+  fn cur_trace_syscall(&self, syscall_id: usize) -> usize {
+    let mut inner = self.inner.exclusive_access();
+    let cur = inner.current_task;
+    let cur_task = &mut inner.tasks[cur];
+    cur_task.trace_syscall(syscall_id)
+  }
+
+  fn debug_vpn_view(&self) {
+    let inner = self.inner.exclusive_access();
+    let cur = inner.current_task;
+    let cur_task = &inner.tasks[cur];
+    cur_task.memory_set.debug_vpn_view();
+  }
 }
+
 /// Run the first task in task list.
 pub fn run_first_task() {
   TASK_MANAGER.run_first_task();
@@ -203,4 +241,29 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
   TASK_MANAGER.change_current_program_brk(size)
+}
+
+///
+pub fn map_mem_area(start_va: VirtAddr, end_va: VirtAddr, permission: u8) -> bool {
+  TASK_MANAGER.map_cur_mem_area(start_va, end_va, permission)
+}
+
+///
+pub fn unmap_mem_area(start_va: VirtAddr, end_va: VirtAddr) -> bool {
+  TASK_MANAGER.unmap_cur_mem_area(start_va, end_va)
+}
+
+/// Trace the current 'Running' task's syscall
+pub fn trace_syscall(syscall_id: usize) -> usize {
+  TASK_MANAGER.cur_trace_syscall(syscall_id)
+}
+
+/// Trace the current 'Running' task's syscall step
+pub fn trace_syscall_step(syscall_id: usize) {
+  TASK_MANAGER.cur_trace_syscall_step(syscall_id);
+}
+
+/// debug 内存
+pub fn debug_mem_view() {
+  TASK_MANAGER.debug_vpn_view();
 }

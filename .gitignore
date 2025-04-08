@@ -18,6 +18,7 @@ ci-user/
 user/
 os/vendor/
 user/
+doc/
 
 bck/
 *.log

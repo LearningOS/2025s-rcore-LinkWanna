@@ -1,5 +1,7 @@
 //! Types related to task management
 
+use alloc::collections::btree_map::BTreeMap;
+
 use super::TaskContext;
 use crate::config::TRAP_CONTEXT_BASE;
 use crate::mm::{
@@ -27,10 +29,14 @@ pub struct TaskControlBlock {
   pub base_size: usize,
 
   /// Heap bottom
+  /// 堆底
   pub heap_bottom: usize,
 
   /// Program break
   pub program_brk: usize,
+
+  /// trace record
+  pub trace_record: BTreeMap<usize, usize>,
 }
 
 impl TaskControlBlock {
@@ -57,6 +63,7 @@ impl TaskControlBlock {
     let task_status = TaskStatus::Ready;
 
     // map a kernel-stack in kernel space
+    // 将内核栈映射到内核空间
     let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(app_id);
     KERNEL_SPACE.exclusive_access().insert_framed_area(
       kernel_stack_bottom.into(),
@@ -70,8 +77,9 @@ impl TaskControlBlock {
       memory_set,
       trap_cx_ppn,
       base_size: user_sp,
-      heap_bottom: user_sp,
+      heap_bottom: user_sp, 
       program_brk: user_sp,
+      trace_record: BTreeMap::new(),
     };
 
     // prepare TrapContext in user space
@@ -95,6 +103,7 @@ impl TaskControlBlock {
     if new_brk < self.heap_bottom as isize {
       return None;
     }
+
     let result = if size < 0 {
       self
         .memory_set
@@ -104,12 +113,38 @@ impl TaskControlBlock {
         .memory_set
         .append_to(VirtAddr(self.heap_bottom), VirtAddr(new_brk as usize))
     };
+
     if result {
       self.program_brk = new_brk as usize;
       Some(old_break)
     } else {
       None
     }
+  }
+
+  /// 进行区域映射
+  pub fn map_mem_area(&mut self, start_va: VirtAddr, end_va: VirtAddr, permission: u8) -> bool {
+    self
+      .memory_set
+      .insert_framed_area(start_va, end_va, MapPermission::from_bits(permission << 1).unwrap() | MapPermission::U)
+  }
+
+  /// 进行区域取消映射
+  pub fn unmap_mem_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+    self
+      .memory_set
+      .remove_framed_area(start_va, end_va)
+  }
+
+  /// 获取指定系统调用的次数
+  pub fn trace_syscall(&mut self, syscall_id: usize) -> usize {
+    self.trace_record.entry(syscall_id).or_insert(0).clone()
+  }
+
+  /// 递增系统调用的次数
+  pub fn trace_syscall_step(&mut self, syscall_id: usize) {
+    let count = self.trace_record.entry(syscall_id).or_insert(0);
+    *count += 1;
   }
 }
 

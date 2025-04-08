@@ -50,9 +50,10 @@ impl Debug for PhysPageNum {
 /// T -> usize: T.0
 /// usize -> T: usize.into()
 
+/// usize 转换为物理地址/页号
+/// 只取低 56/44 位
 impl From<usize> for PhysAddr {
   fn from(v: usize) -> Self {
-    // 取前 39 位
     Self(v & ((1 << PA_WIDTH_SV39) - 1))
   }
 }
@@ -62,6 +63,8 @@ impl From<usize> for PhysPageNum {
   }
 }
 
+/// usize 转换为虚拟地址/页号
+/// 只取低 39/27 位
 impl From<usize> for VirtAddr {
   fn from(v: usize) -> Self {
     Self(v & ((1 << VA_WIDTH_SV39) - 1))
@@ -248,6 +251,9 @@ where
   }
   pub fn get_end(&self) -> T {
     self.r
+  }
+  pub fn contains(&self, t: T) -> bool {
+    self.l <= t && t < self.r
   }
 }
 
