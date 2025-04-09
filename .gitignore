@@ -13,7 +13,7 @@ easy-fs/target/*
 easy-fs-fuse/Cargo.lock
 easy-fs-fuse/target/*
 tools/
-pushall.sh
+pushall.sh  
 ci-user/
 user/
 os/vendor/
