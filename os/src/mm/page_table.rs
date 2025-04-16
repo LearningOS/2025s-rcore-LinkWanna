@@ -132,6 +132,7 @@ impl PageTable {
         assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
+
     /// remove the map between virtual page number and physical page number
     #[allow(unused)]
     pub fn unmap(&mut self, vpn: VirtPageNum) {
@@ -166,6 +167,7 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     let mut start = ptr as usize;
     let end = start + len;
     let mut v = Vec::new();
+
     while start < end {
         let start_va = VirtAddr::from(start);
         let mut vpn = start_va.floor();
@@ -202,7 +204,9 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
     }
     string
 }
+
 /// Translate a ptr[u8] array through page table and return a mutable reference of T
+/// 通过这个函数，可以操作物理内存，但是无法处理跨物理页的数据
 pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     //trace!("into translated_refmut!");
     let page_table = PageTable::from_token(token);

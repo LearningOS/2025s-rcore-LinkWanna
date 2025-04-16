@@ -44,22 +44,63 @@ impl MemorySet {
             areas: Vec::new(),
         }
     }
+
     /// Get the page table token
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
+
     /// Assume that no conflicts.
+    /// 确保虚拟地址空间没有冲突
     pub fn insert_framed_area(
         &mut self,
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
-    ) {
+    ) -> bool {
+        // 通过页表判断是否已经映射
+        let start_vpn: VirtPageNum = start_va.floor();
+        let end_vpn: VirtPageNum = end_va.ceil();
+        let page_table = &self.page_table;
+
+        for vpn in VPNRange::new(start_vpn, end_vpn) {
+            if let Some(pte) = page_table.translate(vpn) {
+                if pte.is_valid() {
+                    // 如果已经映射，则返回 false
+                    warn!("vpn: {} is already mapped", vpn.0);
+                    return false;
+                }
+            }
+        }
+
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
         );
+        true
     }
+
+    ///
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        // 通过页表判断是否未映射
+        let start_vpn: VirtPageNum = start_va.floor();
+        let end_vpn: VirtPageNum = end_va.ceil();
+        let page_table = &self.page_table;
+
+        for vpn in VPNRange::new(start_vpn, end_vpn) {
+            if let Some(pte) = page_table.translate(vpn) {
+                if !pte.is_valid() {
+                    // 如果未映射，则返回 false
+                    warn!("vpn: {} have not mapped", vpn.0);
+                    return false;
+                }
+            }
+        }
+        // 如果都映射，移除该区域，并返回 true
+        self.remove_area_with_start_vpn(start_vpn);
+        true
+    }
+
     /// remove a area
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some((idx, area)) = self
@@ -72,6 +113,7 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+
     /// Add a new MapArea into this MemorySet.
     /// Assuming that there are no conflicts in the virtual address
     /// space.
@@ -82,6 +124,7 @@ impl MemorySet {
         }
         self.areas.push(map_area);
     }
+
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
         self.page_table.map(
@@ -155,6 +198,7 @@ impl MemorySet {
         );
         memory_set
     }
+
     /// Include sections in elf and trampoline and TrapContext and user stack,
     /// also returns user_sp_base and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
@@ -233,6 +277,7 @@ impl MemorySet {
             elf.header.pt2.entry_point() as usize,
         )
     }
+
     /// Create a new address space by copy code&data from a exited process's address space.
     pub fn from_existed_user(user_space: &Self) -> Self {
         let mut memory_set = Self::new_bare();
@@ -325,6 +370,7 @@ impl MapArea {
             map_perm,
         }
     }
+
     pub fn from_another(another: &Self) -> Self {
         Self {
             vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
@@ -333,6 +379,7 @@ impl MapArea {
             map_perm: another.map_perm,
         }
     }
+
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {
@@ -346,14 +393,17 @@ impl MapArea {
             }
         }
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
+        // 确保 vpn 未被映射，否则 panic
         page_table.map(vpn, ppn, pte_flags);
     }
     pub fn unmap_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         if self.map_type == MapType::Framed {
             self.data_frames.remove(&vpn);
         }
+        // 确保 vpn 已被映射，否则 panic
         page_table.unmap(vpn);
     }
+
     pub fn map(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
             self.map_one(page_table, vpn);
@@ -364,6 +414,7 @@ impl MapArea {
             self.unmap_one(page_table, vpn);
         }
     }
+
     #[allow(unused)]
     pub fn shrink_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
         for vpn in VPNRange::new(new_end, self.vpn_range.get_end()) {

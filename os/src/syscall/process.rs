@@ -1,13 +1,16 @@
 //! Process management syscalls
+use core::mem::{size_of, transmute};
+
 use alloc::sync::Arc;
 
 use crate::{
     loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str},
+    mm::{translated_byte_buffer, translated_refmut, translated_str, VirtAddr},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next,
     },
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -45,6 +48,7 @@ pub fn sys_fork() -> isize {
     let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
     // we do not have to move to next instruction since we have done it before
     // for child process, fork returns 0
+    // a0: 系统调用返回值
     trap_cx.x[10] = 0;
     // add new task to scheduler
     add_task(new_task);
@@ -55,6 +59,7 @@ pub fn sys_exec(path: *const u8) -> isize {
     trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
     let token = current_user_token();
     let path = translated_str(token, path);
+
     if let Some(data) = get_app_data_by_name(path.as_str()) {
         let task = current_task().unwrap();
         task.exec(data);
@@ -77,6 +82,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 
     // ---- access current PCB exclusively
     let mut inner = task.inner_exclusive_access();
+    // 检查是否存在对应 pid 的子进程
     if !inner
         .children
         .iter()
@@ -85,15 +91,20 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         return -1;
         // ---- release current PCB
     }
+
+    // 检查子进程是否处于僵尸状态（可回收状态）
     let pair = inner.children.iter().enumerate().find(|(_, p)| {
         // ++++ temporarily access child PCB exclusively
         p.inner_exclusive_access().is_zombie() && (pid == -1 || pid as usize == p.getpid())
         // ++++ release child PCB
     });
+
     if let Some((idx, _)) = pair {
         let child = inner.children.remove(idx);
         // confirm that child will be deallocated after being removed from children list
+        // 只有一个强引用，那么当前函数结束后，child 将会被释放
         assert_eq!(Arc::strong_count(&child), 1);
+
         let found_pid = child.getpid();
         // ++++ temporarily access child PCB exclusively
         let exit_code = child.inner_exclusive_access().exit_code;
@@ -109,30 +120,76 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
+    trace!("kernel:pid[{}] sys_get_time", current_task().unwrap().pid.0);
+    let us = get_time_us();
+    let buf: [u8; size_of::<TimeVal>()] = unsafe {
+        // 转换为字节数组
+        transmute(TimeVal {
+            sec: us / 1_000_000,
+            usec: us % 1_000_000,
+        })
+    };
+
+    // 将字节数组写入目标地址
+    let mut index = 0;
+    translated_byte_buffer(current_user_token(), ts as *const u8, size_of::<TimeVal>())
+        .into_iter()
+        .for_each(|buffer| {
+            buffer.into_iter().for_each(|byte| {
+                *byte = buf[index];
+                index += 1
+            })
+        });
+    0
 }
 
 /// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
+    trace!("kernel:pid[{}] sys_mmap", current_task().unwrap().pid.0);
+
+    // 1. start 必须按页对齐
+    // 2. prot 除前 3 位外，其余位必须为 0
+    // 3. prot 至少在可读，可写，可执行中占一个
+    if (start & 0xFFF) != 0 || (prot & !0x7) != 0 || (prot & 0x7) == 0 {
+        return -1;
+    }
+
+    // 4. 计算映射区域
+    let start_va = VirtAddr(start);
+    let end_va = VirtAddr(start + len);
+
+    // 5. 进行映射
+    let current_task = current_task().unwrap();
+
+    if !current_task.mmap(start_va, end_va, prot) {
+        warn!("map failed");
+        return -1;
+    }
+    0
 }
 
 /// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_munmap(start: usize, len: usize) -> isize {
+    trace!("kernel:pid[{}] sys_munmap", current_task().unwrap().pid.0);
+
+    // 1. start 必须按页对齐
+    if (start & 0xFFF) != 0 {
+        warn!("start: 0x{start} is not aligned");
+        return -1;
+    }
+
+    // 2. 计算映射区域
+    let start_va = VirtAddr(start);
+    let end_va = VirtAddr(start + len);
+
+    // 3. 进行解映射
+    let current_task = current_task().unwrap();
+    if !current_task.munmap(start_va, end_va) {
+        warn!("unmap failed");
+        return -1;
+    }
+    0
 }
 
 /// change data segment size

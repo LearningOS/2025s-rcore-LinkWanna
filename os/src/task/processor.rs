@@ -13,16 +13,19 @@ use alloc::sync::Arc;
 use lazy_static::*;
 
 /// Processor management structure
+/// 处理器管理结构体
 pub struct Processor {
-    ///The task currently executing on the current processor
+    /// The task currently executing on the current processor
+    /// 当前执行在当前处理器上的任务
     current: Option<Arc<TaskControlBlock>>,
 
-    ///The basic control flow of each core, helping to select and switch process
+    /// The basic control flow of each core, helping to select and switch process
+    /// 每个核心的基本控制流，帮助选择和切换进程
     idle_task_cx: TaskContext,
 }
 
 impl Processor {
-    ///Create an empty Processor
+    /// Create an empty Processor
     pub fn new() -> Self {
         Self {
             current: None,
@@ -30,28 +33,29 @@ impl Processor {
         }
     }
 
-    ///Get mutable reference to `idle_task_cx`
+    /// Get mutable reference to `idle_task_cx`
     fn get_idle_task_cx_ptr(&mut self) -> *mut TaskContext {
         &mut self.idle_task_cx as *mut _
     }
 
-    ///Get current task in moving semanteme
+    /// Get current task in moving semanteme
     pub fn take_current(&mut self) -> Option<Arc<TaskControlBlock>> {
         self.current.take()
     }
 
-    ///Get current task in cloning semanteme
+    /// Get current task in cloning semanteme
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
 }
 
 lazy_static! {
+    // 单核环境下，全局处理器实例
     pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
 }
 
-///The main part of process execution and scheduling
-///Loop `fetch_task` to get the process that needs to run, and switch the process through `__switch`
+/// The main part of process execution and scheduling
+/// Loop `fetch_task` to get the process that needs to run, and switch the process through `__switch`
 pub fn run_tasks() {
     loop {
         let mut processor = PROCESSOR.exclusive_access();
@@ -92,7 +96,7 @@ pub fn current_user_token() -> usize {
     task.get_user_token()
 }
 
-///Get the mutable reference to trap context of current task
+/// Get the mutable reference to trap context of current task
 pub fn current_trap_cx() -> &'static mut TrapContext {
     current_task()
         .unwrap()
@@ -100,7 +104,7 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
         .get_trap_cx()
 }
 
-///Return to idle control flow for new scheduling
+/// Return to idle control flow for new scheduling
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     let mut processor = PROCESSOR.exclusive_access();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();

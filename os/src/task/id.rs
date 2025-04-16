@@ -41,15 +41,16 @@ impl RecycleAllocator {
 }
 
 lazy_static! {
-    static ref PID_ALLOCATOR: UPSafeCell<RecycleAllocator> =
-        unsafe { UPSafeCell::new(RecycleAllocator::new()) };
-    static ref KSTACK_ALLOCATOR: UPSafeCell<RecycleAllocator> =
-        unsafe { UPSafeCell::new(RecycleAllocator::new()) };
+    // PID 分配
+    static ref PID_ALLOCATOR: UPSafeCell<RecycleAllocator> = unsafe { UPSafeCell::new(RecycleAllocator::new()) };
+    // 内核栈分配器
+    static ref KSTACK_ALLOCATOR: UPSafeCell<RecycleAllocator> = unsafe { UPSafeCell::new(RecycleAllocator::new()) };
 }
 
 /// Abstract structure of PID
 pub struct PidHandle(pub usize);
 
+// RAII 编程范式
 impl Drop for PidHandle {
     fn drop(&mut self) {
         //println!("drop pid {}", self.0);

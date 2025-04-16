@@ -1,4 +1,5 @@
 //! Building applications linker
+//! 构建应用程序链接器
 
 use std::fs::{read_dir, File};
 use std::io::{Result, Write};

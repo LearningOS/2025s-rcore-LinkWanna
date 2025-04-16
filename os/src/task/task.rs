@@ -2,7 +2,7 @@
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -38,20 +38,20 @@ impl TaskControlBlock {
 
 pub struct TaskControlBlockInner {
     /// The physical page number of the frame where the trap context is placed
-    pub trap_cx_ppn: PhysPageNum,
+    pub trap_cx_ppn: PhysPageNum, // exce 中需要修改
 
     /// Application data can only appear in areas
     /// where the application address space is lower than base_size
-    pub base_size: usize,
+    pub base_size: usize, // exce 中需要修改
 
     /// Save task context
-    pub task_cx: TaskContext,
+    pub task_cx: TaskContext, // exce 中需要修改
 
     /// Maintain the execution status of the current process
     pub task_status: TaskStatus,
 
     /// Application address space
-    pub memory_set: MemorySet,
+    pub memory_set: MemorySet, // exce 中需要修改
 
     /// Parent process of the current process.
     /// Weak will not affect the reference count of the parent
@@ -98,10 +98,12 @@ impl TaskControlBlock {
             .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
             .unwrap()
             .ppn();
+
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
         let kernel_stack_top = kernel_stack.get_top();
+
         // push a task context which goes to trap_return to the top of kernel stack
         let task_control_block = Self {
             pid: pid_handle,
@@ -121,6 +123,7 @@ impl TaskControlBlock {
                 })
             },
         };
+
         // prepare TrapContext in user space
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
         *trap_cx = TrapContext::app_init_context(
@@ -166,12 +169,14 @@ impl TaskControlBlock {
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {
         // ---- access parent PCB exclusively
         let mut parent_inner = self.inner_exclusive_access();
+
         // copy user space(include trap context)
         let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
             .unwrap()
             .ppn();
+
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
@@ -194,6 +199,7 @@ impl TaskControlBlock {
                 })
             },
         });
+
         // add child
         parent_inner.children.push(task_control_block.clone());
         // modify kernel_sp in trap_cx
@@ -235,6 +241,26 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    ///
+    pub fn mmap(&self, start_va: VirtAddr, end_va: VirtAddr, prot: usize) -> bool {
+        let prot = prot as u8;
+
+        let mut inner = self.inner_exclusive_access();
+        let memory_set = &mut inner.memory_set;
+        memory_set.insert_framed_area(
+            start_va,
+            end_va,
+            MapPermission::from_bits(prot << 1).unwrap() | MapPermission::U,
+        )
+    }
+
+    ///
+    pub fn munmap(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let mut inner = self.inner_exclusive_access();
+        let memory_set = &mut inner.memory_set;
+        memory_set.remove_framed_area(start_va, end_va)
     }
 }
 

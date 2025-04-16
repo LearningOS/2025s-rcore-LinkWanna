@@ -3,6 +3,7 @@ use crate::trap::trap_return;
 
 #[repr(C)]
 /// task context structure containing some registers
+/// 包含一些寄存器信息的任务上下文
 pub struct TaskContext {
     /// Ret position after task switching
     ra: usize,

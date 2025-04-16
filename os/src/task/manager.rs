@@ -4,8 +4,10 @@ use crate::sync::UPSafeCell;
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use lazy_static::*;
-///A array of `TaskControlBlock` that is thread-safe
+
+/// A array of `TaskControlBlock` that is thread-safe
 pub struct TaskManager {
+    // 就绪队列
     ready_queue: VecDeque<Arc<TaskControlBlock>>,
 }
 
