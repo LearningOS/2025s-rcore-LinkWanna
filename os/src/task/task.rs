@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{BIG_STRIDE, TRAP_CONTEXT_BASE};
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -22,6 +22,36 @@ pub struct TaskControlBlock {
 
     /// Mutable
     inner: UPSafeCell<TaskControlBlockInner>,
+}
+
+impl PartialEq for TaskControlBlock {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner_exclusive_access()
+            .stride
+            .eq(&other.inner_exclusive_access().stride)
+    }
+}
+
+impl Eq for TaskControlBlock {}
+
+impl PartialOrd for TaskControlBlock {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(&other)) // 调用 Ord 实现的 cmp 方法
+    }
+}
+
+impl Ord for TaskControlBlock {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        match self
+            .inner_exclusive_access()
+            .stride
+            .cmp(&other.inner_exclusive_access().stride)
+        {
+            core::cmp::Ordering::Less => core::cmp::Ordering::Greater,
+            core::cmp::Ordering::Greater => core::cmp::Ordering::Less,
+            _ => core::cmp::Ordering::Equal,
+        }
+    }
 }
 
 impl TaskControlBlock {
@@ -68,6 +98,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// 进程当前已经运行的“长度”
+    pub stride: usize,
+
+    /// 进程优先级
+    pub priority: usize,
 }
 
 impl TaskControlBlockInner {
@@ -84,6 +120,10 @@ impl TaskControlBlockInner {
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+
+    pub fn stride_step(&mut self) {
+        self.stride += BIG_STRIDE / self.priority;
     }
 }
 
@@ -120,6 +160,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride: 0,
+                    priority: 16,
                 })
             },
         };
@@ -202,6 +244,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    stride: 0,
+                    priority: 16,
                 })
             },
         });
@@ -218,7 +262,7 @@ impl TaskControlBlock {
         // ---- release parent PCB
     }
 
-    ///
+    /// Spawn a new task from the given ELF data.
     pub fn spawn(self: &Arc<Self>, elf_data: &[u8]) -> Arc<Self> {
         // ---- access parent PCB exclusively
         let mut parent_inner = self.inner_exclusive_access();
@@ -249,6 +293,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride: 0,
+                    priority: 16,
                 })
             },
         });

@@ -24,7 +24,8 @@ mod task;
 use crate::loader::get_app_data_by_name;
 use alloc::sync::Arc;
 use lazy_static::*;
-pub use manager::{fetch_task, TaskManager};
+pub use manager::{fetch_task, StrideTaskManager};
+// pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
@@ -37,6 +38,7 @@ pub use processor::{
 };
 
 /// Suspend the current 'Running' task and run the next task in task list.
+/// 暂停当前的进程，并运行下一个进程
 pub fn suspend_current_and_run_next() {
     // There must be an application running.
     let task = take_current_task().unwrap();

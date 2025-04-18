@@ -61,6 +61,7 @@ pub fn run_tasks() {
         let mut processor = PROCESSOR.exclusive_access();
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;

@@ -35,6 +35,7 @@ extern crate alloc;
 mod console;
 pub mod config;
 pub mod lang_items;
+pub mod libs;
 mod loader;
 pub mod logging;
 pub mod mm;
