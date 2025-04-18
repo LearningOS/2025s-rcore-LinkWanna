@@ -370,6 +370,12 @@ impl TaskControlBlock {
         let memory_set = &mut inner.memory_set;
         memory_set.remove_framed_area(start_va, end_va)
     }
+
+    ///
+    pub fn set_priority(&self, prio: isize) {
+        let mut inner = self.inner_exclusive_access();
+        inner.priority = prio as usize;
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]

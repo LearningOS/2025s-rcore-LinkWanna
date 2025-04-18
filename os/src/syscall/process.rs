@@ -225,10 +225,18 @@ pub fn sys_spawn(path: *const u8) -> isize {
 }
 
 // YOUR JOB: Set task priority.
-pub fn sys_set_priority(_prio: isize) -> isize {
+pub fn sys_set_priority(prio: isize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_set_priority",
         current_task().unwrap().pid.0
     );
-    -1
+
+    // 1. prio 必须大于等于 2
+    if prio < 2 {
+        return -1;
+    }
+    // 2. 设置优先级
+    let current_task = current_task().unwrap();
+    current_task.set_priority(prio);
+    prio
 }
