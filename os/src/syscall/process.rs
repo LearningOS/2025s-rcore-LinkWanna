@@ -1,14 +1,17 @@
 //! Process management syscalls
 //!
+use core::mem::{size_of, transmute};
+
 use alloc::sync::Arc;
 
 use crate::{
     fs::{open_file, OpenFlags},
-    mm::{translated_refmut, translated_str},
+    mm::{translated_byte_buffer, translated_refmut, translated_str, VirtAddr},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next,
     },
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -54,6 +57,7 @@ pub fn sys_exec(path: *const u8) -> isize {
     trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
     let token = current_user_token();
     let path = translated_str(token, path);
+
     // 基于文件系统的加载
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
@@ -106,30 +110,76 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
+    trace!("kernel:pid[{}] sys_get_time", current_task().unwrap().pid.0);
+    let us = get_time_us();
+    let buf: [u8; size_of::<TimeVal>()] = unsafe {
+        // 转换为字节数组
+        transmute(TimeVal {
+            sec: us / 1_000_000,
+            usec: us % 1_000_000,
+        })
+    };
+
+    // 将字节数组写入目标地址
+    let mut index = 0;
+    translated_byte_buffer(current_user_token(), ts as *const u8, size_of::<TimeVal>())
+        .into_iter()
+        .for_each(|buffer| {
+            buffer.into_iter().for_each(|byte| {
+                *byte = buf[index];
+                index += 1
+            })
+        });
+    0
 }
 
 /// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
+    trace!("kernel:pid[{}] sys_mmap", current_task().unwrap().pid.0);
+
+    // 1. start 必须按页对齐
+    // 2. prot 除前 3 位外，其余位必须为 0
+    // 3. prot 至少在可读，可写，可执行中占一个
+    if (start & 0xFFF) != 0 || (prot & !0x7) != 0 || (prot & 0x7) == 0 {
+        return -1;
+    }
+
+    // 4. 计算映射区域
+    let start_va = VirtAddr(start);
+    let end_va = VirtAddr(start + len);
+
+    // 5. 进行映射
+    let current_task = current_task().unwrap();
+
+    if !current_task.mmap(start_va, end_va, prot) {
+        warn!("map failed");
+        return -1;
+    }
+    0
 }
 
 /// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_munmap(start: usize, len: usize) -> isize {
+    trace!("kernel:pid[{}] sys_munmap", current_task().unwrap().pid.0);
+
+    // 1. start 必须按页对齐
+    if (start & 0xFFF) != 0 {
+        warn!("start: 0x{start} is not aligned");
+        return -1;
+    }
+
+    // 2. 计算映射区域
+    let start_va = VirtAddr(start);
+    let end_va = VirtAddr(start + len);
+
+    // 3. 进行解映射
+    let current_task = current_task().unwrap();
+    if !current_task.munmap(start_va, end_va) {
+        warn!("unmap failed");
+        return -1;
+    }
+    0
 }
 
 /// change data segment size
@@ -144,19 +194,38 @@ pub fn sys_sbrk(size: i32) -> isize {
 
 /// YOUR JOB: Implement spawn.
 /// HINT: fork + exec =/= spawn
-pub fn sys_spawn(_path: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_spawn(path: *const u8) -> isize {
+    trace!("kernel:pid[{}] sys_spawn", current_task().unwrap().pid.0);
+    let token = current_user_token();
+    let path = translated_str(token, path);
+
+    // 基于文件系统的加载
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
+        let task = current_task().unwrap();
+        let new_task = task.spawn(all_data.as_slice());
+        let new_pid = new_task.pid.0;
+        add_task(new_task);
+
+        new_pid as isize
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Set task priority.
-pub fn sys_set_priority(_prio: isize) -> isize {
+pub fn sys_set_priority(prio: isize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_set_priority",
         current_task().unwrap().pid.0
     );
-    -1
+
+    // 1. prio 必须大于等于 2
+    if prio < 2 {
+        return -1;
+    }
+    // 2. 设置优先级
+    let current_task = current_task().unwrap();
+    current_task.set_priority(prio);
+    prio
 }

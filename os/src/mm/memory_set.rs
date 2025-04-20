@@ -54,18 +54,56 @@ impl MemorySet {
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
-    /// Assume that no conflicts.
+
+    /// 确保虚拟地址空间没有冲突
     pub fn insert_framed_area(
         &mut self,
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
-    ) {
+    ) -> bool {
+        // 通过页表判断是否已经映射
+        let start_vpn: VirtPageNum = start_va.floor();
+        let end_vpn: VirtPageNum = end_va.ceil();
+        let page_table = &self.page_table;
+
+        for vpn in VPNRange::new(start_vpn, end_vpn) {
+            if let Some(pte) = page_table.translate(vpn) {
+                if pte.is_valid() {
+                    // 如果已经映射，则返回 false
+                    warn!("vpn: {} is already mapped", vpn.0);
+                    return false;
+                }
+            }
+        }
+
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
         );
+        true
     }
+    ///
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        // 通过页表判断是否未映射
+        let start_vpn: VirtPageNum = start_va.floor();
+        let end_vpn: VirtPageNum = end_va.ceil();
+        let page_table = &self.page_table;
+
+        for vpn in VPNRange::new(start_vpn, end_vpn) {
+            if let Some(pte) = page_table.translate(vpn) {
+                if !pte.is_valid() {
+                    // 如果未映射，则返回 false
+                    warn!("vpn: {} have not mapped", vpn.0);
+                    return false;
+                }
+            }
+        }
+        // 如果都映射，移除该区域，并返回 true
+        self.remove_area_with_start_vpn(start_vpn);
+        true
+    }
+
     /// remove a area
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some((idx, area)) = self
