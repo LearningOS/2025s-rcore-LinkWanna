@@ -220,6 +220,7 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
 }
 
 /// An abstraction over a buffer passed from user space to kernel space
+/// 一个从用户空间到内核空间的缓冲区抽象
 pub struct UserBuffer {
     /// A list of buffers
     pub buffers: Vec<&'static mut [u8]>,

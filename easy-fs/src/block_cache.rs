@@ -1,9 +1,13 @@
+//！第二层：块缓存层
+//！向上层提供透明读写数据块的的服务
 use super::{BlockDevice, BLOCK_SZ};
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use lazy_static::*;
 use spin::Mutex;
+
 /// Cached block inside memory
+/// 内存中的块缓存
 pub struct BlockCache {
     /// cached block data
     cache: [u8; BLOCK_SZ],
@@ -27,11 +31,14 @@ impl BlockCache {
             modified: false,
         }
     }
+
     /// Get the address of an offset inside the cached block data
+    /// 获取块缓存中偏移量的地址
     fn addr_of_offset(&self, offset: usize) -> usize {
         &self.cache[offset] as *const _ as usize
     }
 
+    /// 获取缓冲区中的位于偏移量 offset 的一个类型为 T 的磁盘上数据结构的不可变引用
     pub fn get_ref<T>(&self, offset: usize) -> &T
     where
         T: Sized,
@@ -61,6 +68,7 @@ impl BlockCache {
         f(self.get_mut(offset))
     }
 
+    /// 同步块缓存
     pub fn sync(&mut self) {
         if self.modified {
             self.modified = false;
@@ -70,13 +78,16 @@ impl BlockCache {
 }
 
 impl Drop for BlockCache {
+    /// 当块缓存被丢弃时，将会同步块缓存
     fn drop(&mut self) {
         self.sync()
     }
 }
+
 /// Use a block cache of 16 blocks
 const BLOCK_CACHE_SIZE: usize = 16;
 
+/// FIFO 实现的块缓存管理器
 pub struct BlockCacheManager {
     queue: VecDeque<(usize, Arc<Mutex<BlockCache>>)>,
 }
@@ -93,12 +104,16 @@ impl BlockCacheManager {
         block_id: usize,
         block_device: Arc<dyn BlockDevice>,
     ) -> Arc<Mutex<BlockCache>> {
+        // 寻找指定 id 的缓存块
         if let Some(pair) = self.queue.iter().find(|pair| pair.0 == block_id) {
+            // 返回找到的缓存块引用
             Arc::clone(&pair.1)
         } else {
             // substitute
+            // 缓冲区已满，执行替换操作
             if self.queue.len() == BLOCK_CACHE_SIZE {
                 // from front to tail
+                // 找到第一个引用计数为 1 的缓存块进行换出
                 if let Some((idx, _)) = self
                     .queue
                     .iter()
@@ -107,9 +122,11 @@ impl BlockCacheManager {
                 {
                     self.queue.drain(idx..=idx);
                 } else {
+                    // 缓冲区溢出
                     panic!("Run out of BlockCache!");
                 }
             }
+
             // load block into mem and push back
             let block_cache = Arc::new(Mutex::new(BlockCache::new(
                 block_id,
@@ -126,6 +143,7 @@ lazy_static! {
     pub static ref BLOCK_CACHE_MANAGER: Mutex<BlockCacheManager> =
         Mutex::new(BlockCacheManager::new());
 }
+
 /// Get the block cache corresponding to the given block id and block device
 pub fn get_block_cache(
     block_id: usize,
@@ -135,6 +153,7 @@ pub fn get_block_cache(
         .lock()
         .get_block_cache(block_id, block_device)
 }
+
 /// Sync all block cache to block device
 pub fn block_cache_sync_all() {
     let manager = BLOCK_CACHE_MANAGER.lock();

@@ -7,6 +7,7 @@ use std::sync::Mutex;
 
 const BLOCK_SZ: usize = 512;
 
+/// 将一个文件封装为一个磁盘设备
 struct BlockFile(Mutex<File>);
 
 impl BlockDevice for BlockFile {
@@ -90,15 +91,20 @@ fn easy_fs_pack() -> std::io::Result<()> {
 #[test]
 fn efs_test() -> std::io::Result<()> {
     let block_file = Arc::new(BlockFile(Mutex::new({
+        // 打开块设备
         let f = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
             .open("target/fs.img")?;
+        // 设置容量 4MB
         f.set_len(8192 * 512).unwrap();
         f
     })));
+
+    // 在文件上创建文件系统
     EasyFileSystem::create(block_file.clone(), 4096, 1);
+
     let efs = EasyFileSystem::open(block_file.clone());
     let root_inode = EasyFileSystem::root_inode(&efs);
     root_inode.create("filea");
@@ -109,7 +115,8 @@ fn efs_test() -> std::io::Result<()> {
     let filea = root_inode.find("filea").unwrap();
     let greet_str = "Hello, world!";
     filea.write_at(0, greet_str.as_bytes());
-    //let mut buffer = [0u8; 512];
+
+    // let mut buffer = [0u8; 512];
     let mut buffer = [0u8; 233];
     let len = filea.read_at(0, &mut buffer);
     assert_eq!(greet_str, core::str::from_utf8(&buffer[..len]).unwrap(),);

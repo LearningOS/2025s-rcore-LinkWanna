@@ -96,6 +96,7 @@ impl MemorySet {
             PTEFlags::R | PTEFlags::X,
         );
     }
+
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
@@ -159,6 +160,7 @@ impl MemorySet {
             ),
             None,
         );
+        // MMIO 进行设备寄存器映射
         info!("mapping memory-mapped registers");
         for pair in MMIO {
             memory_set.push(

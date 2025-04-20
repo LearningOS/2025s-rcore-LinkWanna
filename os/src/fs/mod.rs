@@ -6,6 +6,7 @@ mod stdio;
 use crate::mm::UserBuffer;
 
 /// trait File for all file types
+/// 参考标准库
 pub trait File: Send + Sync {
     /// the file readable?
     fn readable(&self) -> bool;

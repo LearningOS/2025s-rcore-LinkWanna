@@ -1,3 +1,4 @@
+//！第五层：索引节点层
 use super::{
     block_cache_sync_all, get_block_cache, BlockDevice, DirEntry, DiskInode, DiskInodeType,
     EasyFileSystem, DIRENT_SZ,
@@ -6,6 +7,7 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::{Mutex, MutexGuard};
+
 /// Virtual filesystem layer over easy-fs
 pub struct Inode {
     block_id: usize,
@@ -29,6 +31,7 @@ impl Inode {
             block_device,
         }
     }
+
     /// Call a function over a disk inode to read it
     fn read_disk_inode<V>(&self, f: impl FnOnce(&DiskInode) -> V) -> V {
         get_block_cache(self.block_id, Arc::clone(&self.block_device))

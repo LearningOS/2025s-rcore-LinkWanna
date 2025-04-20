@@ -37,11 +37,14 @@ impl OSInode {
             inner: unsafe { UPSafeCell::new(OSInodeInner { offset: 0, inode }) },
         }
     }
+
     /// read all data from the inode
     pub fn read_all(&self) -> Vec<u8> {
         let mut inner = self.inner.exclusive_access();
+        // 创建固定大小缓冲区，并使用 0 填充
         let mut buffer: Vec<u8> = Vec::with_capacity(512);
         buffer.resize(512, 0);
+
         let mut v: Vec<u8> = Vec::new();
         loop {
             let len = inner.inode.read_at(inner.offset, &mut buffer);
@@ -55,6 +58,7 @@ impl OSInode {
     }
 }
 
+// 根目录
 lazy_static! {
     pub static ref ROOT_INODE: Arc<Inode> = {
         let efs = EasyFileSystem::open(BLOCK_DEVICE.clone());
@@ -101,12 +105,12 @@ impl OpenFlags {
     }
 }
 
-/// Open a file
+/// 根据文件名打开文件
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
         if let Some(inode) = ROOT_INODE.find(name) {
-            // clear size
+            // 如果文件已经存在，则清空文件的内容
             inode.clear();
             Some(Arc::new(OSInode::new(readable, writable, inode)))
         } else {

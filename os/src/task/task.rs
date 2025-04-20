@@ -64,6 +64,8 @@ pub struct TaskControlBlockInner {
 
     /// It is set when active exit or execution error occurs
     pub exit_code: i32,
+
+    /// 使用 dyn 可以合理地接纳任何符合块设备的文件
     pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
 
     /// Heap bottom

@@ -54,6 +54,7 @@ pub fn sys_exec(path: *const u8) -> isize {
     trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
     let token = current_user_token();
     let path = translated_str(token, path);
+    // 基于文件系统的加载
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
         let task = current_task().unwrap();
