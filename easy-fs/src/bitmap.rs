@@ -8,8 +8,8 @@ const BLOCK_BITS: usize = BLOCK_SZ * 8;
 
 /// A bitmap
 pub struct Bitmap {
-    start_block_id: usize,
-    blocks: usize,
+    start_block_id: usize, // 起始块编码
+    blocks: usize,         // 块数
 }
 
 /// Decompose bits into (block_pos, bits64_pos, inner_pos)
@@ -65,6 +65,7 @@ impl Bitmap {
     }
 
     /// Deallocate a block
+    /// 回收一个块
     pub fn dealloc(&self, block_device: &Arc<dyn BlockDevice>, bit: usize) {
         let (block_pos, bits64_pos, inner_pos) = decomposition(bit);
         get_block_cache(block_pos + self.start_block_id, Arc::clone(block_device))

@@ -38,7 +38,7 @@ impl BlockCache {
         &self.cache[offset] as *const _ as usize
     }
 
-    /// 获取缓冲区中的位于偏移量 offset 的一个类型为 T 的磁盘上数据结构的不可变引用
+    /// 很特殊的函数，从磁盘中读取 T 大小的字节，并解析为 T
     pub fn get_ref<T>(&self, offset: usize) -> &T
     where
         T: Sized,

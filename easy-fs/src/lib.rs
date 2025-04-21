@@ -2,6 +2,7 @@
 #![no_std]
 #![deny(missing_docs)]
 extern crate alloc;
+extern crate log;
 mod bitmap;
 mod block_cache;
 mod block_dev;
@@ -11,9 +12,11 @@ mod vfs;
 
 use bitmap::Bitmap;
 use block_cache::{block_cache_sync_all, get_block_cache};
+use layout::*;
+
+// 对外接口
 pub use block_dev::BlockDevice;
 pub use efs::EasyFileSystem;
-use layout::*;
 pub use vfs::Inode;
 
 /// Use a block size of 512 bytes

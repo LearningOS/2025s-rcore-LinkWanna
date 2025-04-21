@@ -85,12 +85,17 @@ type IndirectBlock = [u32; BLOCK_SZ / 4];
 type DataBlock = [u8; BLOCK_SZ];
 
 /// A disk inode
+/// 描述文件类型和文件物理位置(128 字节)
+/// 每个块上都保存着若干个索引节点 DiskInode
+/// 每个文件/目录在磁盘上均以一个 DiskInode 的形式存储
 #[repr(C)]
 pub struct DiskInode {
     pub size: u32,
+    // 这里的 u32 是数据块的位置索引
     pub direct: [u32; INODE_DIRECT_COUNT], // 直接块编号数组(14KiB)
     pub indirect1: u32,                    // 一级间接块编号(128 * 512B = 64KiB)
     pub indirect2: u32,                    // 二级间接块编号(128 * 64KiB = 8MiB)
+    pub links: u16,                        // 硬链接数量
     type_: DiskInodeType,
 }
 
@@ -103,6 +108,7 @@ impl DiskInode {
         self.direct.iter_mut().for_each(|v| *v = 0);
         self.indirect1 = 0;
         self.indirect2 = 0;
+        self.links = 1;
         self.type_ = type_;
     }
 
@@ -147,6 +153,7 @@ impl DiskInode {
     }
 
     /// Get id of block given inner id
+    /// 从 DiskInode 管理的数据块中获取 block_id
     pub fn get_block_id(&self, inner_id: u32, block_device: &Arc<dyn BlockDevice>) -> u32 {
         let inner_id = inner_id as usize;
         if inner_id < INODE_DIRECT_COUNT {
@@ -252,6 +259,8 @@ impl DiskInode {
 
     /// Clear size to zero and return blocks that should be deallocated.
     /// We will clear the block contents to zero later.
+    /// 将大小清零并返回应该被回收的块
+    /// 之后应该回收所有清零的块
     pub fn clear_size(&mut self, block_device: &Arc<dyn BlockDevice>) -> Vec<u32> {
         let mut v: Vec<u32> = Vec::new();
         let mut data_blocks = self.data_blocks() as usize;
@@ -282,6 +291,7 @@ impl DiskInode {
                 }
             });
         self.indirect1 = 0;
+
         // indirect2 block
         if data_blocks > INODE_INDIRECT1_COUNT {
             v.push(self.indirect2);
@@ -383,6 +393,7 @@ impl DiskInode {
         assert!(start <= end);
         let mut start_block = start / BLOCK_SZ;
         let mut write_size = 0usize;
+
         loop {
             // calculate end of current block
             let mut end_current_block = (start / BLOCK_SZ + 1) * BLOCK_SZ;
@@ -411,8 +422,8 @@ impl DiskInode {
     }
 }
 
-/// A directory entry
-/// 目录结构体
+/// 目录项结构体
+/// 共 32 个字节，每个数据块可以存储 16 个目录项
 #[repr(C)]
 pub struct DirEntry {
     name: [u8; NAME_LENGTH_LIMIT + 1],
@@ -450,6 +461,7 @@ impl DirEntry {
     }
     /// Get name of the entry
     pub fn name(&self) -> &str {
+        // 寻找第一个 '\0' 的位置
         let len = (0usize..).find(|i| self.name[*i] == 0).unwrap();
         core::str::from_utf8(&self.name[..len]).unwrap()
     }

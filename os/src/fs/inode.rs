@@ -58,7 +58,8 @@ impl OSInode {
     }
 }
 
-// 根目录
+// 根目录，将通过根目录索引所有的文件和目录
+// 本质上也是一个 Inode
 lazy_static! {
     pub static ref ROOT_INODE: Arc<Inode> = {
         let efs = EasyFileSystem::open(BLOCK_DEVICE.clone());
@@ -105,7 +106,8 @@ impl OpenFlags {
     }
 }
 
-/// 根据文件名打开文件
+/// 从根目录开始，根据文件名打开文件
+/// 可以看出 OSInode 是动态创建，维护在内存中的
 pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::CREATE) {
@@ -127,6 +129,17 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
             Arc::new(OSInode::new(readable, writable, inode))
         })
     }
+}
+
+/// 创建一个硬链接
+pub fn linkat(old_name: &str, new_name: &str) -> bool {
+    ROOT_INODE.do_linkat(old_name, new_name);
+    true
+}
+
+/// 删除一个文件或目录
+pub fn unlinkat(name: &str) -> bool {
+    ROOT_INODE.do_unlinkat(name)
 }
 
 impl File for OSInode {
@@ -159,5 +172,8 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn inode(&self) -> Option<Arc<Inode>> {
+        Some(self.inner.exclusive_access().inode.clone())
     }
 }

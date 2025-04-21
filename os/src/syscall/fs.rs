@@ -1,5 +1,7 @@
 //! File and filesystem-related syscalls
-use crate::fs::{open_file, OpenFlags, Stat};
+use core::mem::{size_of, transmute};
+
+use crate::fs::{linkat, open_file, unlinkat, OpenFlags, Stat, StatMode};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 
@@ -32,6 +34,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     if fd >= inner.fd_table.len() {
         return -1;
     }
+    // 这里的 file 具体类型通常是 OSInode
     if let Some(file) = &inner.fd_table[fd] {
         let file = file.clone();
         if !file.readable() {
@@ -40,6 +43,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
         // release current task TCB manually to avoid multi-borrow
         drop(inner);
         trace!("kernel: sys_read .. file.read");
+        // 读取到用户空间
         file.read(UserBuffer::new(translated_byte_buffer(token, buf, len))) as isize
     } else {
         -1
@@ -53,6 +57,7 @@ pub fn sys_open(path: *const u8, flags: u32) -> isize {
     let path = translated_str(token, path);
     if let Some(inode) = open_file(path.as_str(), OpenFlags::from_bits(flags).unwrap()) {
         let mut inner = task.inner_exclusive_access();
+        // 为当前进程分配一个文件描述符
         let fd = inner.alloc_fd();
         inner.fd_table[fd] = Some(inode);
         fd as isize
@@ -78,28 +83,76 @@ pub fn sys_close(fd: usize) -> isize {
 }
 
 /// YOUR JOB: Implement fstat.
-pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_fstat NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
+pub fn sys_fstat(fd: usize, st: *mut Stat) -> isize {
+    trace!("kernel:pid[{}] sys_fstat", current_task().unwrap().pid.0);
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    if fd >= inner.fd_table.len() {
+        return -1;
+    }
+    // 1. 从文件描述符中获取文件 Inode
+    if let Some(file) = &inner.fd_table[fd] {
+        let file = file.clone();
+        drop(inner);
+        debug!("getting inode");
+        if let Some(inode) = file.inode() {
+            // 2. 构造 Stat
+            let inode_id = inode.inode_id();
+            let nlink = inode.link_count();
+            let is_dir = inode.is_dir();
+            let is_file = inode.is_file();
+            let mode = match (is_dir, is_file) {
+                (true, false) => StatMode::DIR,
+                (false, true) => StatMode::FILE,
+                _ => StatMode::NULL,
+            };
+            debug!("building Stat");
+            let buf: [u8; size_of::<Stat>()] =
+                unsafe { transmute(Stat::new(0, inode_id as u64, mode, nlink as u32)) };
+
+            // 3. 写入用户空间
+            debug!("writing to user space");
+            let mut index = 0;
+            translated_byte_buffer(current_user_token(), st as *const u8, size_of::<Stat>())
+                .into_iter()
+                .for_each(|buffer| {
+                    buffer.into_iter().for_each(|byte| {
+                        *byte = buf[index];
+                        index += 1
+                    })
+                });
+            return 0;
+        }
+    }
     -1
 }
 
 /// YOUR JOB: Implement linkat.
-pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_linkat NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_linkat(old_name: *const u8, new_name: *const u8) -> isize {
+    trace!("kernel:pid[{}] sys_linkat", current_task().unwrap().pid.0);
+    // 1. 获取原文件名和新文件名
+    debug!("getting old and new file names");
+    let old_path = translated_str(current_user_token(), old_name);
+    let new_path = translated_str(current_user_token(), new_name);
+
+    // 2. 确保不会链接同名文件
+    if old_path == new_path {
+        return -1;
+    }
+
+    // 3. 进行链接
+    linkat(&old_path, &new_path);
+    0
 }
 
 /// YOUR JOB: Implement unlinkat.
-pub fn sys_unlinkat(_name: *const u8) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_unlinkat NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_unlinkat(name: *const u8) -> isize {
+    trace!("kernel:pid[{}] sys_unlinkat", current_task().unwrap().pid.0);
+    let path = translated_str(current_user_token(), name);
+
+    if unlinkat(&path) {
+        0
+    } else {
+        -1
+    }
 }
