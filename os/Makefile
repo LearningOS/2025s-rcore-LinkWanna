@@ -27,7 +27,7 @@ OBJCOPY := rust-objcopy --binary-architecture=riscv64
 
 CHAPTER ?= $(shell git rev-parse --abbrev-ref HEAD | sed -E 's/ch([0-9])/\1/')
 TEST ?= $(CHAPTER)
-BASE ?= 1
+BASE ?= 2
 
 # Disassembly
 DISASM ?= -x
@@ -35,7 +35,7 @@ DISASM ?= -x
 # Run usertests or usershell
 TEST ?=
 
-build: env $(KERNEL_BIN) fs-img 
+build: env $(KERNEL_BIN) fs-img
 
 env:
 ifeq ($(OFFLINE),)
@@ -70,6 +70,8 @@ disasm-vim: kernel
 
 run: build run-inner
 
+# -drive file=$(FS_IMG),if=none,format=raw,id=x0： 添加一块虚拟硬盘，并命名为x0
+# -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0：将硬盘 x0 作为一个 VirtIO 总线中的一个块设备接入到虚拟机系统中
 run-inner:
 	@qemu-system-riscv64 \
 		-M 128m \
