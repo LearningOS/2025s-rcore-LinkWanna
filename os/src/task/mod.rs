@@ -10,6 +10,7 @@
 //! might not be what you expect.
 
 mod context;
+mod deadlock_detector;
 mod id;
 mod manager;
 mod process;
@@ -30,6 +31,7 @@ use process::ProcessControlBlock;
 use switch::__switch;
 
 pub use context::TaskContext;
+pub use deadlock_detector::DeadlockDetector;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle, IDLE_PID};
 pub use manager::{add_task, pid2process, remove_from_pid2process, remove_task, wakeup_task};
 pub use processor::{

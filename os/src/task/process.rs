@@ -2,9 +2,9 @@
 
 use super::id::RecycleAllocator;
 use super::manager::insert_into_pid2process;
-use super::TaskControlBlock;
 use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
+use super::{DeadlockDetector, TaskControlBlock};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
 use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
@@ -51,6 +51,10 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// deadlock detector
+    pub deadlock_detector: Option<DeadlockDetector>,
+    /// enable_deadlock_detect
+    pub enable_deadlock_detect: bool,
 }
 
 impl ProcessControlBlockInner {
@@ -121,6 +125,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detector: None,
+                    enable_deadlock_detect: false,
                 })
             },
         });
@@ -247,6 +253,8 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detector: None,
+                    enable_deadlock_detect: false,
                 })
             },
         });
