@@ -1,4 +1,5 @@
 //! Allocator for pid, task user resource, kernel stack using a simple recycle strategy.
+//! 使用简单的 recycle 策略来分配资源
 
 use super::ProcessControlBlock;
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE};
@@ -127,10 +128,11 @@ impl KernelStack {
 }
 
 /// User Resource for a task
+/// 用户线程的资源
 pub struct TaskUserRes {
     /// task id
     pub tid: usize,
-    /// user stack base
+    /// user stack base (线程有独立的栈)
     pub ustack_base: usize,
     /// process belongs to
     pub process: Weak<ProcessControlBlock>,
@@ -140,6 +142,7 @@ fn trap_cx_bottom_from_tid(tid: usize) -> usize {
     TRAP_CONTEXT_BASE - tid * PAGE_SIZE
 }
 /// Return the bottom addr (high addr) of the user stack for a task
+/// 给用户线程分配一个栈(位于高地址)
 fn ustack_bottom_from_tid(ustack_base: usize, tid: usize) -> usize {
     ustack_base + tid * (PAGE_SIZE + USER_STACK_SIZE)
 }
@@ -166,6 +169,7 @@ impl TaskUserRes {
     pub fn alloc_user_res(&self) {
         let process = self.process.upgrade().unwrap();
         let mut process_inner = process.inner_exclusive_access();
+
         // alloc user stack
         let ustack_bottom = ustack_bottom_from_tid(self.ustack_base, self.tid);
         let ustack_top = ustack_bottom + USER_STACK_SIZE;
@@ -174,6 +178,7 @@ impl TaskUserRes {
             ustack_top.into(),
             MapPermission::R | MapPermission::W | MapPermission::U,
         );
+
         // alloc trap_cx
         let trap_cx_bottom = trap_cx_bottom_from_tid(self.tid);
         let trap_cx_top = trap_cx_bottom + PAGE_SIZE;
@@ -216,6 +221,7 @@ impl TaskUserRes {
         let mut process_inner = process.inner_exclusive_access();
         process_inner.dealloc_tid(self.tid);
     }
+
     /// The bottom usr vaddr (low addr) of the trap context for a task with tid
     pub fn trap_cx_user_va(&self) -> usize {
         trap_cx_bottom_from_tid(self.tid)
@@ -231,6 +237,7 @@ impl TaskUserRes {
             .unwrap()
             .ppn()
     }
+
     /// the bottom addr (low addr) of the user stack for a task
     pub fn ustack_base(&self) -> usize {
         self.ustack_base

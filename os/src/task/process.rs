@@ -16,6 +16,7 @@ use alloc::vec::Vec;
 use core::cell::RefMut;
 
 /// Process Control Block
+/// 进程控制块
 pub struct ProcessControlBlock {
     /// immutable
     pub pid: PidHandle,
@@ -43,6 +44,7 @@ pub struct ProcessControlBlockInner {
     pub tasks: Vec<Option<Arc<TaskControlBlock>>>,
     /// task resource allocator
     pub task_res_allocator: RecycleAllocator,
+    // 同步资源是需要在内核中维护的
     /// mutex list
     pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
     /// semaphore list

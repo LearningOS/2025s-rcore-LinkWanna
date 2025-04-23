@@ -1,4 +1,5 @@
 //! Types related to task management & Functions for completely changing TCB
+//! 现在这里的 TCB 为线程控制块，主要维护一个执行流
 
 use super::id::TaskUserRes;
 use super::{kstack_alloc, KernelStack, ProcessControlBlock, TaskContext};
@@ -8,6 +9,7 @@ use alloc::sync::{Arc, Weak};
 use core::cell::RefMut;
 
 /// Task control block structure
+/// 线程控制块
 pub struct TaskControlBlock {
     /// immutable
     pub process: Weak<ProcessControlBlock>,
@@ -31,6 +33,7 @@ impl TaskControlBlock {
 }
 
 pub struct TaskControlBlockInner {
+    /// 用户线程的资源
     pub res: Option<TaskUserRes>,
     /// The physical page number of the frame where the trap context is placed
     pub trap_cx_ppn: PhysPageNum,

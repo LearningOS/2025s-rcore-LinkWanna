@@ -15,6 +15,7 @@ pub trait Mutex: Sync + Send {
 }
 
 /// Spinlock Mutex struct
+/// 自旋实现的互斥锁
 pub struct MutexSpin {
     locked: UPSafeCell<bool>,
 }
@@ -35,6 +36,7 @@ impl Mutex for MutexSpin {
         loop {
             let mut locked = self.locked.exclusive_access();
             if *locked {
+                // 释放锁，并释放 cpu
                 drop(locked);
                 suspend_current_and_run_next();
                 continue;
@@ -53,6 +55,10 @@ impl Mutex for MutexSpin {
 }
 
 /// Blocking Mutex struct
+// 阻塞+唤醒机制互斥锁
+// 为了防止线程饿死，这里构建了一个有序的访问队列
+// 将该线程标记为阻塞状态 (Blocked) 并将其从调度器的就绪队列中移除
+// 有效避免了大量的上下文切换
 pub struct MutexBlocking {
     inner: UPSafeCell<MutexBlockingInner>,
 }
@@ -96,6 +102,7 @@ impl Mutex for MutexBlocking {
         trace!("kernel: MutexBlocking::unlock");
         let mut mutex_inner = self.inner.exclusive_access();
         assert!(mutex_inner.locked);
+        // 释放锁后，直接将锁移交给下一个线程
         if let Some(waking_task) = mutex_inner.wait_queue.pop_front() {
             wakeup_task(waking_task);
         } else {

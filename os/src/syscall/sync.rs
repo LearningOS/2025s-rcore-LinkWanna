@@ -2,6 +2,7 @@ use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
 use crate::task::{block_current_and_run_next, current_process, current_task};
 use crate::timer::{add_timer, get_time_ms};
 use alloc::sync::Arc;
+
 /// sleep syscall
 pub fn sys_sleep(ms: usize) -> isize {
     trace!(
@@ -21,7 +22,9 @@ pub fn sys_sleep(ms: usize) -> isize {
     block_current_and_run_next();
     0
 }
+
 /// mutex create syscall
+/// 返回值类似于文件描述符
 pub fn sys_mutex_create(blocking: bool) -> isize {
     trace!(
         "kernel:pid[{}] tid[{}] sys_mutex_create",
@@ -40,6 +43,7 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
     } else {
         Some(Arc::new(MutexBlocking::new()))
     };
+
     let mut process_inner = process.inner_exclusive_access();
     if let Some(id) = process_inner
         .mutex_list
@@ -97,6 +101,7 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
     mutex.unlock();
     0
 }
+
 /// semaphore create syscall
 pub fn sys_semaphore_create(res_count: usize) -> isize {
     trace!(
@@ -169,6 +174,7 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
     sem.down();
     0
 }
+
 /// condvar create syscall
 pub fn sys_condvar_create() -> isize {
     trace!(
@@ -242,8 +248,9 @@ pub fn sys_condvar_wait(condvar_id: usize, mutex_id: usize) -> isize {
     condvar.wait(mutex);
     0
 }
+
 /// enable deadlock detection syscall
-///
+/// 启用死锁检测
 /// YOUR JOB: Implement deadlock detection, but might not all in this syscall
 pub fn sys_enable_deadlock_detect(_enabled: usize) -> isize {
     trace!("kernel: sys_enable_deadlock_detect NOT IMPLEMENTED");

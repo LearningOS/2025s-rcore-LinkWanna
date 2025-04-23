@@ -45,6 +45,7 @@ impl Processor {
 }
 
 lazy_static! {
+    /// 依旧是单核处理器
     pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
 }
 

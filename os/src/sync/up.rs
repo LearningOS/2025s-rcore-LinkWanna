@@ -2,7 +2,8 @@
 //!
 //! UPSafeCell is used to wrap a static data structure which can access safely.
 //!
-//! NOTICE: We should only use it in environment with uniprocessor（single cpu core）, and the kernel can not support task preempting in kernel mode （or trap in kernel mode）.
+//! NOTICE: We should only use it in environment with uniprocessor（single cpu core）,
+//! and the kernel can not support task preempting in kernel mode （or trap in kernel mode）.
 
 use core::cell::{RefCell, RefMut};
 
@@ -18,6 +19,7 @@ pub struct UPSafeCell<T> {
     inner: RefCell<T>,
 }
 
+/// 支持线程间共享
 unsafe impl<T> Sync for UPSafeCell<T> {}
 
 impl<T> UPSafeCell<T> {
