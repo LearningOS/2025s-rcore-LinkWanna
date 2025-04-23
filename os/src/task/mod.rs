@@ -83,19 +83,24 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     let mut task_inner = task.inner_exclusive_access();
     let process = task.process.upgrade().unwrap();
     let tid = task_inner.res.as_ref().unwrap().tid;
+
     // record exit code
     task_inner.exit_code = Some(exit_code);
     task_inner.res = None;
+
     // here we do not remove the thread since we are still using the kstack
     // it will be deallocated when sys_waittid is called
+    // kstack 并不位于 task_inner 中
     drop(task_inner);
 
     // Move the task to stop-wait status, to avoid kernel stack from being freed
     if tid == 0 {
+        // 如果是主线程退出，需要添加到停止任务中，避免回收
         add_stopping_task(task);
     } else {
         drop(task);
     }
+
     // however, if this is the main thread of current process
     // the process should terminate at once
     if tid == 0 {
@@ -106,22 +111,24 @@ pub fn exit_current_and_run_next(exit_code: i32) {
                 exit_code
             );
             if exit_code != 0 {
-                //crate::sbi::shutdown(255); //255 == -1 for err hint
+                // crate::sbi::shutdown(255); // 255 == -1 for err hint
                 crate::board::QEMU_EXIT_HANDLE.exit_failure();
             } else {
-                //crate::sbi::shutdown(0); //0 for success hint
+                // crate::sbi::shutdown(0); // 0 for success hint
                 crate::board::QEMU_EXIT_HANDLE.exit_success();
             }
         }
         remove_from_pid2process(pid);
         let mut process_inner = process.inner_exclusive_access();
         // mark this process as a zombie process
+        // 标记为僵尸进程
         process_inner.is_zombie = true;
         // record exit code of main process
         process_inner.exit_code = exit_code;
 
         {
             // move all child processes under init process
+            // 将所有的子进程移动到 init 进程下
             let mut initproc_inner = INITPROC.inner_exclusive_access();
             for child in process_inner.children.iter() {
                 child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
@@ -132,6 +139,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
         // deallocate user res (including tid/trap_cx/ustack) of all threads
         // it has to be done before we dealloc the whole memory_set
         // otherwise they will be deallocated twice
+        // 回收用户线程资源
         let mut recycle_res = Vec::<TaskUserRes>::new();
         for task in process_inner.tasks.iter().filter(|t| t.is_some()) {
             let task = task.as_ref().unwrap();
@@ -148,6 +156,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
                 recycle_res.push(res);
             }
         }
+
         // dealloc_tid and dealloc_user_res require access to PCB inner, so we
         // need to collect those user res first, then release process_inner
         // for now to avoid deadlock/double borrow problem.

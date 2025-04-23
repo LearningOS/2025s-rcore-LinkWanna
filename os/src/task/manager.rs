@@ -11,8 +11,9 @@ use lazy_static::*;
 ///A array of `TaskControlBlock` that is thread-safe
 pub struct TaskManager {
     ready_queue: VecDeque<Arc<TaskControlBlock>>,
-    
+
     /// The stopping task, leave a reference so that the kernel stack will not be recycled when switching tasks
+    /// 停止任务，留一个引用，这样内核栈就不会在切换任务时被回收
     stop_task: Option<Arc<TaskControlBlock>>,
 }
 
@@ -50,7 +51,6 @@ impl TaskManager {
         // case) so that we can simply replace it;
         self.stop_task = Some(task);
     }
-
 }
 
 lazy_static! {
@@ -58,6 +58,7 @@ lazy_static! {
     pub static ref TASK_MANAGER: UPSafeCell<TaskManager> =
         unsafe { UPSafeCell::new(TaskManager::new()) };
     /// PID2PCB instance (map of pid to pcb)
+    /// pid 到 PCB 的映射
     pub static ref PID2PCB: UPSafeCell<BTreeMap<usize, Arc<ProcessControlBlock>>> =
         unsafe { UPSafeCell::new(BTreeMap::new()) };
 }
@@ -105,7 +106,7 @@ pub fn insert_into_pid2process(pid: usize, process: Arc<ProcessControlBlock>) {
     PID2PCB.exclusive_access().insert(pid, process);
 }
 
-/// Remove item(pid, _some_pcb) from PDI2PCB map (called by exit_current_and_run_next)
+/// Remove item(pid, _some_pcb) from PID2PCB map (called by exit_current_and_run_next)
 pub fn remove_from_pid2process(pid: usize) {
     let mut map = PID2PCB.exclusive_access();
     if map.remove(&pid).is_none() {
